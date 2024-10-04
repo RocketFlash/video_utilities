@@ -26,6 +26,9 @@ class VideoFramesData:
     frame_interval_sec: float
     start_idx: int
     start_sec: float
+    n_frames_max: int
+    n_sec_max: float
+
 
     def __str__(self):
         info_str = f"Video frames data info:\n"
@@ -35,11 +38,13 @@ class VideoFramesData:
         info_str += f"height original: {self.h_orig}\n"
         info_str += f"start index    : {self.start_idx}\n"
         info_str += f"start second   : {self.start_sec}\n"
-        info_str += f"n of frames    : {self.n_frames}\n"
+        info_str += f"n frames       : {self.n_frames}\n"
+        info_str += f"n seconds      : {self.l}\n"
         info_str += f"fps            : {self.fps}\n"
         info_str += f"frame interval : {self.frame_interval}\n"
+        info_str += f"n frames max   : {self.n_frames_max}\n"
+        info_str += f"n seconds max  : {self.n_sec_max}\n"
         info_str += f"frame interval in seconds: {self.frame_interval_sec}\n"
-        info_str += f"clip length in seconds   : {self.l}\n"
         info_str += f"original video length in seconds: {self.l_orig}\n"
         return info_str
     
@@ -123,9 +128,10 @@ class VideoReader:
         n_frames_available = (n_frames_total - start_idx) // frame_interval
         n_frames_max = self.n_frames_max
         n_frames = n_frames_available
+        n_sec_max = self.n_sec_max
 
-        if self.n_sec_max is not None:
-            n_frames_max = int(self.n_sec_max * fps / frame_interval)
+        if n_sec_max is not None:
+            n_frames_max = int(n_sec_max * fps / frame_interval)
 
         if n_frames_max is not None:
             if n_frames_available < n_frames_max:
@@ -177,7 +183,7 @@ class VideoReader:
         pbar.close()
 
         h, w = frame.shape[:2]
-        l = len(frames) / fps if fps>0 else -1
+        l = len(frames)*frame_interval / fps if fps>0 else -1
 
         video_frames_data = VideoFramesData(
             frames=frames,
@@ -193,7 +199,9 @@ class VideoReader:
             start_idx=start_idx,
             start_sec=start_sec,
             frame_interval=frame_interval,
-            frame_interval_sec=frame_interval_sec
+            frame_interval_sec=frame_interval_sec,
+            n_frames_max=n_frames_max,
+            n_sec_max=n_sec_max
         )
 
         return video_frames_data

@@ -6,11 +6,26 @@ from tqdm.auto import tqdm
 
 
 class VideoDownloader:
+    r"""
+    VideoDownloader downloads video using api
+
+    Args:
+        url_template (`str`):
+            Get download links API template
+        secret (`str`):
+            Secret to API
+        quality (`str`, *optional*, defaults to `max`):
+            Quality of downloaded video ['max', 'min', '480p', '720p', '1080p']
+        save_dir (`str` or `Path`, *optional*, defaults to `./`):
+            Save directory path
+        chunk_size (`int`, *optional*, defaults to `4096`):
+            Download file chunk size
+    """
     def __init__(
         self,
         url_template: str,
         secret: str,
-        quality: str = 'max', # 'max', 'min', '480p', '720p', '1080p',
+        quality: str = 'max',
         save_dir: Union[str, os.PathLike] = './',
         chunk_size: int = 4096
     ):
