@@ -15,7 +15,7 @@ class ImageCaptioner:
         device: str = 'cpu',
         dtype: torch.dtype = torch.float16,
         generation_params: Dict = {},
-        prompt: str = 'In this video frame',
+        prompt: Union[str, List] = 'In this video frame',
         question_template: str = 'Question: {} Answer:',
         output_template: str = 'Q: {}\nA: {}',
         mode: str = 'simple', # ['simple', 'prompted', 'qa', 'chat']
@@ -128,7 +128,15 @@ class ImageCaptioner:
 
 
     def prompted_image_captioning(self, image):
-        return [self.generate_output(image, self.prompt)]
+        prompts = self.prompt
+        if not isinstance(prompts, list):
+            prompts = [prompts]
+
+        outputs = []
+        for prompt in prompts:
+            outputs.append(self.generate_output(image, prompt))
+
+        return outputs
 
 
     def question_answering(self, image):
