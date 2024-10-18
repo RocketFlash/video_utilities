@@ -93,7 +93,8 @@ class ImageCaptioner:
     def decode_ids(
         self,
         generated_ids,
-        prompt_len=None
+        prompt_len=None,
+        inputs=None
     ):
         generated_text = self.processor.batch_decode(
             generated_ids,
