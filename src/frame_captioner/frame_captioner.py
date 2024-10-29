@@ -17,6 +17,7 @@ class FrameCaptioner:
         generation_params: Dict = {},
         prompt: Union[str, List] = 'In this video frame',
         tags: Union[Dict, List] = [],
+        tags_desc: Optional[Union[Dict, List]] = None,
         qa_input_template: str = 'Question: {} Answer:',
         qa_output_template: str = 'Q: {}\nA: {}',
         tagging_input_template: str = 'Based on the visual content of the video frame, choose the tags that best describe {} what is shown. Provide the results in the form of a list separated by commas. If no tags apply, state "None". \n\nList of tags: \n{}',
@@ -42,6 +43,7 @@ class FrameCaptioner:
         self.set_qa_input_template(qa_input_template)
         self.set_qa_output_template(qa_output_template)
         self.set_tags(tags)
+        self.set_tags_desc(tags_desc)
         self.set_tagging_input_template(tagging_input_template)
         self.set_tagging_output_template(tagging_output_template)
         self.set_mode(mode)
@@ -61,6 +63,9 @@ class FrameCaptioner:
 
     def set_tags(self, tags):
         self.tags = tags
+
+    def set_tags_desc(self, tags_desc):
+        self.tags_desc = tags_desc
 
     def set_questions(self, questions):
         self.questions = questions
@@ -155,14 +160,26 @@ class FrameCaptioner:
 
     def tagging(self, image):
         tags_dict = self.tags
+        tags_desc_dict = self.tags_desc
+
         if not isinstance(tags_dict, dict):
             tags_dict = {'general': tags_dict}
+            if tags_desc_dict is not None:
+                tags_desc_dict = {'general': ''}
 
         outputs = []
         for tags_category, tags_list in tags_dict.items():
             tag_names_str = '\n'.join(tags_list)
-            prompt = self.tagging_input_template.format(tags_category, tag_names_str)
+            if tags_desc_dict is not None:
+                if tags_category in tags_desc_dict:
+                    tags_cat_desc = tags_desc_dict[tags_category]
+                else:
+                    tags_cat_desc = ''
+            else:
+                tags_cat_desc = ''
+            prompt = self.tagging_input_template.format(tags_cat_desc, tag_names_str)
             output = self.generate_output(image, prompt)
+            output = self.tagging_output_template.format(tags_category, output)
             outputs.append(output)
 
         return outputs
