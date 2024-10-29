@@ -11,18 +11,17 @@ class FrameCaptioner:
     def __init__(
         self,
         model_name: str = 'Salesforce/blip2-opt-2.7b',
-        questions: List = [None],
+        questions: List[str] = ['What is this?'],
         device: str = 'cpu',
         dtype: torch.dtype = torch.float16,
         generation_params: Dict = {},
         prompt: Union[str, List] = 'In this video frame',
-        tags: Union[Dict, List] = [],
-        tags_desc: Optional[Union[Dict, str]] = None,
+        tags: Union[Dict[str, List[str]], List[str]] = [],
+        tags_desc: Optional[Union[Dict[str, str], str]] = None,
         qa_input_template: str = 'Question: {} Answer:',
-        qa_output_template: Optional[str] = None,
         tagging_input_template: str = 'Based on the visual content of the video frame, choose the tags that best describe {} what is shown. Provide the results in the form of a list separated by commas. If no tags apply, state "None". \n\nList of tags: \n{}',
-        tagging_output_template: Optional[str] = None,
-        mode: str = 'simple', # ['simple', 'prompted', 'qa', 'chat']
+        output_template: str = '{} : {}',
+        mode: str = 'simple', # ['simple', 'prompted', 'tagging', 'qa', 'chat']
         use_quantization: bool = False
     ):
         self.model_name = model_name
@@ -41,11 +40,10 @@ class FrameCaptioner:
         self.set_prompt(prompt)
         self.set_questions(questions)
         self.set_qa_input_template(qa_input_template)
-        self.set_qa_output_template(qa_output_template)
         self.set_tags(tags)
         self.set_tags_desc(tags_desc)
         self.set_tagging_input_template(tagging_input_template)
-        self.set_tagging_output_template(tagging_output_template)
+        self.set_output_template(output_template)
         self.set_mode(mode)
 
 
@@ -73,14 +71,11 @@ class FrameCaptioner:
     def set_qa_input_template(self, qa_input_template):
         self.qa_input_template = qa_input_template
 
-    def set_qa_output_template(self, qa_output_template):
-        self.qa_output_template = qa_output_template
-
     def set_tagging_input_template(self, tagging_input_template):
         self.tagging_input_template = tagging_input_template
 
-    def set_tagging_output_template(self, tagging_output_template):
-        self.tagging_output_template = tagging_output_template
+    def set_output_template(self, output_template):
+        self.output_template = output_template
 
 
     def process_image(self, image):
@@ -143,7 +138,9 @@ class FrameCaptioner:
 
 
     def simple_frame_captioning(self, image):
-        return [self.generate_output(image, None)]
+        output = self.generate_output(image, None)
+        outputs = {'caption' : output}
+        return outputs
 
 
     def prompted_frame_captioning(self, image):
@@ -151,9 +148,10 @@ class FrameCaptioner:
         if not isinstance(prompts, list):
             prompts = [prompts]
 
-        outputs = []
+        outputs = {}
         for prompt in prompts:
-            outputs.append(self.generate_output(image, prompt))
+            output = self.generate_output(image, prompt)
+            outputs[prompt] = output
 
         return outputs
     
@@ -167,9 +165,10 @@ class FrameCaptioner:
             if tags_desc_dict is not None:
                 tags_desc_dict = {'general': tags_desc_dict}
 
-        outputs = []
+        outputs = {}
         for tags_category, tags_list in tags_dict.items():
             tag_names_str = '\n'.join(tags_list)
+
             if tags_desc_dict is not None:
                 if tags_category in tags_desc_dict:
                     tags_cat_desc = tags_desc_dict[tags_category]
@@ -177,54 +176,55 @@ class FrameCaptioner:
                     tags_cat_desc = ''
             else:
                 tags_cat_desc = ''
+
             prompt = self.tagging_input_template.format(tags_cat_desc, tag_names_str)
             output = self.generate_output(image, prompt)
-            if self.tagging_output_template is not None:
-                output = self.tagging_output_template.format(tags_category, output)
-            outputs.append(output)
+            outputs[tags_category] = output
 
         return outputs
 
 
     def question_answering(self, image):
-        outputs = []
+        outputs = {}
 
         for question in self.questions:
-            if question is not None:
-                prompt = self.qa_input_template.format(question)
-            else:
-                prompt = None
-            output = self.generate_output(image, prompt)
+            if question is None:
+                continue
 
-            if self.qa_output_template is not None:
-                output = self.qa_output_template.format(question, output)
-            outputs.append(output)
+            prompt = self.qa_input_template.format(question)
+            output = self.generate_output(image, prompt)
+            outputs[question] = output
+
         return outputs
 
 
     def chat(self, image):
-        outputs = []
+        outputs = {}
         qa_template = self.qa_input_template + ' {}.'
         context = ''
 
         for question in self.questions:
-            if question is not None:
-                prompt = context + self.qa_input_template.format(question)
-            else:
-                prompt = None
+            if question is None:
+                continue
 
-            answer = self.generate_output(image, prompt)
+            prompt = context + self.qa_input_template.format(question)
+            output = self.generate_output(image, prompt)
 
-            if question is not None:
-                question_anwer = qa_template.format(question, answer)
-                context += question_anwer + ' '
-            else:
-                context += answer + ' '
-
-            output = self.qa_output_template.format(question, answer)
-            outputs.append(output)
+            question_anwer = qa_template.format(question, output)
+            context += question_anwer + ' '
+            
+            outputs[question] = output
 
         return outputs
+    
+
+    def outputs_to_string(self, outputs):
+        output_strs = []
+        for k, v in outputs.items():
+            output_str = self.output_template.format(k, v)
+            output_strs.append(output_str)
+        return output_strs
+
 
     def __call__(self, image):
         if self.mode == 'prompted':

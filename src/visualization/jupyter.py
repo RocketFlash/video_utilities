@@ -58,8 +58,9 @@ def visualize_frames(
 
         def on_button_click(b):       
             frame = frames[frame_slider.value]
-            answers_list = frame_captioner(frame)
-            caption = '\n\n'.join(answers_list) 
+            outputs = frame_captioner(frame)
+            output_strs = frame_captioner.outputs_to_string(outputs)
+            caption = '\n\n'.join(output_strs) 
             caption_widget.value = caption
 
         caption_button = widgets.Button(
