@@ -4,10 +4,10 @@ from transformers import (
     AutoProcessor,
     MllamaForConditionalGeneration,
 )
-from .image_captioner import ImageCaptioner
+from .frame_captioner import FrameCaptioner
 
 
-class Llam3VLImageCaptioner(ImageCaptioner):
+class Llam3VLFrameCaptioner(FrameCaptioner):
     message_template = {
         "role": "user",
         "content": [

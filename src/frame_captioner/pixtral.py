@@ -5,10 +5,10 @@ from transformers import (
     LlavaForConditionalGeneration
 )
 from transformers import BitsAndBytesConfig
-from .image_captioner import ImageCaptioner
+from .frame_captioner import FrameCaptioner
 
 
-class PixtralImageCaptioner(ImageCaptioner):
+class PixtralFrameCaptioner(FrameCaptioner):
     def get_model_and_processor(
         self,
         model_name: str,

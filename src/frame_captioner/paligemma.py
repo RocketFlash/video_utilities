@@ -2,10 +2,10 @@ from transformers import (
     AutoProcessor,
     PaliGemmaForConditionalGeneration,
 )
-from .image_captioner import ImageCaptioner
+from .frame_captioner import FrameCaptioner
 
 
-class PaliGemma2ImageCaptioner(ImageCaptioner):
+class PaliGemma2FrameCaptioner(FrameCaptioner):
     def get_model_and_processor(
         self,
         model_name: str,

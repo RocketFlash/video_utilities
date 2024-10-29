@@ -5,10 +5,10 @@ from transformers import (
     Qwen2VLForConditionalGeneration,
 )
 from qwen_vl_utils import process_vision_info
-from .image_captioner import ImageCaptioner
+from .frame_captioner import FrameCaptioner
 
 
-class Qwen2VLImageCaptioner(ImageCaptioner):
+class Qwen2VLFrameCaptioner(FrameCaptioner):
     message_template = {
         "role": "user",
         "content": [

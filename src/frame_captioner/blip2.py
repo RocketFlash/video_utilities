@@ -2,10 +2,10 @@ from transformers import (
     AutoProcessor,
     Blip2ForConditionalGeneration,
 )
-from .image_captioner import ImageCaptioner
+from .frame_captioner import FrameCaptioner
 
 
-class BLIP2ImageCaptioner(ImageCaptioner):
+class BLIP2FrameCaptioner(FrameCaptioner):
     def get_model_and_processor(
         self,
         model_name: str,

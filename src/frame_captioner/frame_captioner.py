@@ -7,7 +7,7 @@ from typing import (
 )
 
 
-class ImageCaptioner:
+class FrameCaptioner:
     def __init__(
         self,
         model_name: str = 'Salesforce/blip2-opt-2.7b',
@@ -16,8 +16,11 @@ class ImageCaptioner:
         dtype: torch.dtype = torch.float16,
         generation_params: Dict = {},
         prompt: Union[str, List] = 'In this video frame',
-        question_template: str = 'Question: {} Answer:',
-        output_template: str = 'Q: {}\nA: {}',
+        tags: Union[Dict, List] = [],
+        qa_input_template: str = 'Question: {} Answer:',
+        qa_output_template: str = 'Q: {}\nA: {}',
+        tagging_input_template: str = 'Based on the visual content of the video frame, choose the tags that best describe {} what is shown. Provide the results in the form of a list separated by commas. If no tags apply, state "None". \n\nList of tags: \n{}',
+        tagging_output_template: str = 'category: {}\n tags: \n{}\n',
         mode: str = 'simple', # ['simple', 'prompted', 'qa', 'chat']
         use_quantization: bool = False
     ):
@@ -33,11 +36,15 @@ class ImageCaptioner:
 
         self.model = model
         self.processor = processor
-        self.prompt = prompt
-        self.questions = questions
-        self.question_template = question_template
-        self.output_template = output_template
-        self.mode = mode
+        
+        self.set_prompt(prompt)
+        self.set_questions(questions)
+        self.set_qa_input_template(qa_input_template)
+        self.set_qa_output_template(qa_output_template)
+        self.set_tags(tags)
+        self.set_tagging_input_template(tagging_input_template)
+        self.set_tagging_output_template(tagging_output_template)
+        self.set_mode(mode)
 
 
     def get_model_and_processor(
@@ -48,21 +55,27 @@ class ImageCaptioner:
 
     def set_mode(self, mode):
         self.mode = mode
-
-    def set_mode(self, mode):
-        self.mode = mode
-
+   
     def set_prompt(self, prompt):
         self.prompt = prompt
+
+    def set_tags(self, tags):
+        self.tags = tags
 
     def set_questions(self, questions):
         self.questions = questions
 
-    def set_question_template(self, question_template):
-        self.question_template = question_template
+    def set_qa_input_template(self, qa_input_template):
+        self.qa_input_template = qa_input_template
 
-    def set_output_template(self, output_template):
-        self.output_template = output_template
+    def set_qa_output_template(self, qa_output_template):
+        self.qa_output_template = qa_output_template
+
+    def set_tagging_input_template(self, tagging_input_template):
+        self.tagging_input_template = tagging_input_template
+
+    def set_tagging_output_template(self, tagging_output_template):
+        self.tagging_output_template = tagging_output_template
 
 
     def process_image(self, image):
@@ -124,11 +137,11 @@ class ImageCaptioner:
         return generated_text
 
 
-    def simple_image_captioning(self, image):
+    def simple_frame_captioning(self, image):
         return [self.generate_output(image, None)]
 
 
-    def prompted_image_captioning(self, image):
+    def prompted_frame_captioning(self, image):
         prompts = self.prompt
         if not isinstance(prompts, list):
             prompts = [prompts]
@@ -138,6 +151,21 @@ class ImageCaptioner:
             outputs.append(self.generate_output(image, prompt))
 
         return outputs
+    
+
+    def tagging(self, image):
+        tags_dict = self.tags
+        if not isinstance(tags_dict, dict):
+            tags_dict = {'general': tags_dict}
+
+        outputs = []
+        for tags_category, tags_list in tags_dict.items():
+            tag_names_str = '\n'.join(tags_list)
+            prompt = self.tagging_input_template.format(tags_category, tag_names_str)
+            output = self.generate_output(image, prompt)
+            outputs.append(output)
+
+        return outputs
 
 
     def question_answering(self, image):
@@ -145,23 +173,23 @@ class ImageCaptioner:
 
         for question in self.questions:
             if question is not None:
-                prompt = self.question_template.format(question)
+                prompt = self.qa_input_template.format(question)
             else:
                 prompt = None
             answer = self.generate_output(image, prompt)
-            output = self.output_template.format(question, answer)
+            output = self.qa_output_template.format(question, answer)
             outputs.append(output)
         return outputs
 
 
     def chat(self, image):
         outputs = []
-        qa_template = self.question_template + ' {}.'
+        qa_template = self.qa_input_template + ' {}.'
         context = ''
 
         for question in self.questions:
             if question is not None:
-                prompt = context + self.question_template.format(question)
+                prompt = context + self.qa_input_template.format(question)
             else:
                 prompt = None
 
@@ -173,18 +201,20 @@ class ImageCaptioner:
             else:
                 context += answer + ' '
 
-            output = self.output_template.format(question, answer)
+            output = self.qa_output_template.format(question, answer)
             outputs.append(output)
 
         return outputs
 
     def __call__(self, image):
         if self.mode == 'prompted':
-            outputs = self.prompted_image_captioning(image)
+            outputs = self.prompted_frame_captioning(image)
         elif self.mode == 'qa':
             outputs = self.question_answering(image)
+        elif self.mode == 'tagging':
+            outputs = self.tagging(image)
         elif self.mode == 'chat':
             outputs = self.chat(image)
         else:
-            outputs = self.simple_image_captioning(image)
+            outputs = self.simple_frame_captioning(image)
         return outputs
