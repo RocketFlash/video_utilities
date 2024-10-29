@@ -6,7 +6,7 @@ from .qwen2 import Qwen2VLFrameCaptioner
 from .paligemma import PaliGemma2FrameCaptioner
 
 
-def get_captioner(
+def get_frame_captioner(
     model_name='Salesforce/blip2-opt-2.7b',
     **frame_captioner_params
 ):

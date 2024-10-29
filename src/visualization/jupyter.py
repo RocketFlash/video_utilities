@@ -13,7 +13,7 @@ from typing import (
 def visualize_frames(
     frames,
     frame_max_size: Optional[int] = None,
-    image_captioner=None,
+    frame_captioner=None,
 ):
     n_frames = len(frames)
     frame_height, frame_width, _ = frames[0].shape
@@ -46,7 +46,7 @@ def visualize_frames(
     wgts_output = [image_widget]
     wgts_interface = [frame_slider]
 
-    if image_captioner is not None:
+    if frame_captioner is not None:
         caption_widget = widgets.Textarea(
             value='',
             description='Caption:',
@@ -58,7 +58,7 @@ def visualize_frames(
 
         def on_button_click(b):       
             frame = frames[frame_slider.value]
-            answers_list = image_captioner(frame)
+            answers_list = frame_captioner(frame)
             caption = '\n\n'.join(answers_list) 
             caption_widget.value = caption
 
