@@ -17,11 +17,11 @@ class FrameCaptioner:
         generation_params: Dict = {},
         prompt: Union[str, List] = 'In this video frame',
         tags: Union[Dict, List] = [],
-        tags_desc: Optional[Union[Dict, List]] = None,
+        tags_desc: Optional[Union[Dict, str]] = None,
         qa_input_template: str = 'Question: {} Answer:',
-        qa_output_template: str = 'Q: {}\nA: {}',
+        qa_output_template: Optional[str] = None,
         tagging_input_template: str = 'Based on the visual content of the video frame, choose the tags that best describe {} what is shown. Provide the results in the form of a list separated by commas. If no tags apply, state "None". \n\nList of tags: \n{}',
-        tagging_output_template: str = 'category: {}\n tags: \n{}\n',
+        tagging_output_template: Optional[str] = None,
         mode: str = 'simple', # ['simple', 'prompted', 'qa', 'chat']
         use_quantization: bool = False
     ):
@@ -165,7 +165,7 @@ class FrameCaptioner:
         if not isinstance(tags_dict, dict):
             tags_dict = {'general': tags_dict}
             if tags_desc_dict is not None:
-                tags_desc_dict = {'general': ''}
+                tags_desc_dict = {'general': tags_desc_dict}
 
         outputs = []
         for tags_category, tags_list in tags_dict.items():
@@ -179,7 +179,8 @@ class FrameCaptioner:
                 tags_cat_desc = ''
             prompt = self.tagging_input_template.format(tags_cat_desc, tag_names_str)
             output = self.generate_output(image, prompt)
-            output = self.tagging_output_template.format(tags_category, output)
+            if self.tagging_output_template is not None:
+                output = self.tagging_output_template.format(tags_category, output)
             outputs.append(output)
 
         return outputs
@@ -193,8 +194,10 @@ class FrameCaptioner:
                 prompt = self.qa_input_template.format(question)
             else:
                 prompt = None
-            answer = self.generate_output(image, prompt)
-            output = self.qa_output_template.format(question, answer)
+            output = self.generate_output(image, prompt)
+
+            if self.qa_output_template is not None:
+                output = self.qa_output_template.format(question, output)
             outputs.append(output)
         return outputs
 
