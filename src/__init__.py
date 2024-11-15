@@ -1,3 +1,3 @@
 from .video_downloader import VideoDownloader
-from .video_reader import VideoReader
+from .video_frame_splitter import VideoFrameSplitter
 from .visualization.jupyter import visualize_frames

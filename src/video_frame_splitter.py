@@ -8,7 +8,10 @@ from typing import (
     Dict
 )
 from dataclasses import dataclass
-
+import numpy as np
+from .utils import get_frame_idxs_from_interval
+from .video_scene_detector import SceneData
+    
 
 @dataclass
 class VideoFramesData:
@@ -19,6 +22,7 @@ class VideoFramesData:
     w: int
     h: int
     n_frames: int
+    n_frames_orig: int
     l: float
     l_orig: float
     fps: float
@@ -39,19 +43,20 @@ class VideoFramesData:
         info_str += f"start index    : {self.start_idx}\n"
         info_str += f"start second   : {self.start_sec}\n"
         info_str += f"n frames       : {self.n_frames}\n"
-        info_str += f"n seconds      : {self.l}\n"
+        info_str += f"len in sec     : {self.l}\n"
         info_str += f"fps            : {self.fps}\n"
         info_str += f"frame interval : {self.frame_interval}\n"
         info_str += f"n frames max   : {self.n_frames_max}\n"
         info_str += f"n seconds max  : {self.n_sec_max}\n"
-        info_str += f"frame interval in seconds: {self.frame_interval_sec}\n"
-        info_str += f"original video length in seconds: {self.l_orig}\n"
+        info_str += f"frame interval in sec: {self.frame_interval_sec}\n"
+        info_str += f"original video len in sec: {self.l_orig}\n"
+        info_str += f"original video len in n frames: {self.n_frames_orig}\n"
         return info_str
     
 
-class VideoReader:
+class VideoFrameSplitter:
     r"""
-    VideoReader reads frames and return video information
+    VideoFrameSplitter reads frames and return video information
 
     Args:
         start_idx (`int`, *optional*, defaults to `0`):
@@ -69,12 +74,17 @@ class VideoReader:
             If not None, the number of frames collected will be limited by this value.
         n_sec_max (`float`, *optional*, defaults to `None`):
             If not None, the number of frames collected will be limited by this value in seconds.
+        scene_list (`list[dict]`, *optional*, defaults to `None`):
+            If set, frames will be taken based on scenes. Scene list should be a list of dicts with 
+            start_frame and end_frame values. For example [{start_frame=0, end_frame=114}, ...]
+        n_frames_per_scene (`int`, *optional*, defaults to `1`):
+            Used in case if scene_list is not None. Number of frames from each scene
     """
     def __init__(
         self,
-        start_idx: int = 0,
+        start_idx: Optional[int] = 0,
         start_sec: Optional[float] = None,
-        frame_interval: int = 1,
+        frame_interval: Optional[int] = 1,
         frame_interval_sec: Optional[float] = None,
         frame_max_size: Optional[int] = None,
         n_frames_max: Optional[int] = None,
@@ -87,11 +97,13 @@ class VideoReader:
         self.n_frames_max = n_frames_max
         self.n_sec_max = n_sec_max
         self.frame_max_size = frame_max_size
-
+      
     
     def __call__(
         self,
         video_path: Union[str, os.PathLike],
+        scene_list: Optional[List[SceneData]] = None,
+        n_frames_per_scene: Optional[int] = 1,
     ):
         frames = []
         frame_indexes = []
@@ -140,6 +152,31 @@ class VideoReader:
 
         video.set(cv2.CAP_PROP_POS_FRAMES, start_idx)
 
+        all_selected_frames = None
+        if scene_list is not None:
+            all_selected_frames = []
+            for scene in scene_list:
+                start_scene_idx = scene.start_frame
+                end_scene_idx = scene.end_frame
+
+                if start_idx>=end_scene_idx:
+                    continue
+                elif start_idx<end_scene_idx and start_idx>start_scene_idx:
+                    start_scene_idx = start_idx
+
+                selected_frame_idxs = get_frame_idxs_from_interval(
+                    start_scene_idx, 
+                    end_scene_idx, 
+                    n_frames=n_frames_per_scene
+                )
+
+                all_selected_frames += selected_frame_idxs
+            n_frames = len(all_selected_frames)
+            frame_interval = None
+            frame_interval_sec = None
+            n_sec_max = None
+            n_frames_max = None
+
         resize_scale = 1
         if self.frame_max_size is not None:
             max_dim = max(h_orig, w_orig)
@@ -148,6 +185,7 @@ class VideoReader:
 
         frame_idx = 0
         frame_count = 0
+
         pbar = tqdm(total=n_frames)
 
         while True:
@@ -157,8 +195,15 @@ class VideoReader:
             success = video.grab()
             if not success:
                 break
-                
-            if frame_idx % frame_interval == 0:
+            
+            is_selected_frame = False
+            if all_selected_frames is not None:
+                if frame_idx in all_selected_frames:
+                    is_selected_frame = True
+            else:
+                is_selected_frame = (frame_idx % frame_interval) == 0
+            
+            if is_selected_frame:
                 success, frame = video.retrieve()
                 if not success:
                     break
@@ -183,7 +228,10 @@ class VideoReader:
         pbar.close()
 
         h, w = frame.shape[:2]
-        l = len(frames)*frame_interval / fps if fps>0 else -1
+        if frame_interval is not None and fps>0:
+            l = len(frames)*frame_interval / fps
+        else:
+            l = None
 
         video_frames_data = VideoFramesData(
             frames=frames,
@@ -193,6 +241,7 @@ class VideoReader:
             w=w,
             h=h,
             n_frames=len(frames),
+            n_frames_orig=n_frames_total,
             l=l,
             l_orig=l_orig,
             fps=fps,
