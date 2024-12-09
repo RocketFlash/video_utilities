@@ -1,5 +1,6 @@
 import os
 import cv2
+import numpy as np
 from tqdm.auto import tqdm
 from typing import (
     Union, 
@@ -8,9 +9,17 @@ from typing import (
     Dict
 )
 from dataclasses import dataclass
-import numpy as np
-from .utils import get_frame_idxs_from_interval
-from .video_scene_detector import SceneData
+from .config import VideoFrameSplitterConfig
+from ..utils import get_frame_idxs_from_interval
+from ..video_scene_detector import SceneData
+
+
+@dataclass
+class VideoFrame:
+    image: np.ndarray
+    idx: int
+    timestamp: float
+    scene_id: Optional[int]
     
 
 @dataclass
@@ -33,7 +42,6 @@ class VideoFramesData:
     n_frames_max: int
     n_sec_max: float
 
-
     def __str__(self):
         info_str = f"Video frames data info:\n"
         info_str += f"width          : {self.w}\n"
@@ -52,13 +60,16 @@ class VideoFramesData:
         info_str += f"original video len in sec: {self.l_orig}\n"
         info_str += f"original video len in n frames: {self.n_frames_orig}\n"
         return info_str
-    
+
 
 class VideoFrameSplitter:
     r"""
     VideoFrameSplitter reads frames and return video information
 
     Args:
+        config (`VideoFrameSplitterConfig`, *optional*, defaults to `None`):
+            Config for VideoFrameSplitter initialization. If is set all other parameters
+            will be ignored.
         start_idx (`int`, *optional*, defaults to `0`):
             Initial frame index
         start_sec (`float`, *optional*, defaults to `None`):
@@ -75,13 +86,14 @@ class VideoFrameSplitter:
         n_sec_max (`float`, *optional*, defaults to `None`):
             If not None, the number of frames collected will be limited by this value in seconds.
         scene_list (`list[dict]`, *optional*, defaults to `None`):
-            If set, frames will be taken based on scenes. Scene list should be a list of dicts with 
+            If is set, frames will be taken based on scenes. Scene list should be a list of dicts with 
             start_frame and end_frame values. For example [{start_frame=0, end_frame=114}, ...]
         n_frames_per_scene (`int`, *optional*, defaults to `1`):
             Used in case if scene_list is not None. Number of frames from each scene
     """
     def __init__(
         self,
+        config: Optional[VideoFrameSplitterConfig] = None,
         start_idx: Optional[int] = 0,
         start_sec: Optional[float] = None,
         frame_interval: Optional[int] = 1,
@@ -89,14 +101,32 @@ class VideoFrameSplitter:
         frame_max_size: Optional[int] = None,
         n_frames_max: Optional[int] = None,
         n_sec_max: Optional[float] = None,
+    ):  
+        if config is None:
+            config = VideoFrameSplitterConfig(
+                start_idx=start_idx,
+                start_sec=start_sec,
+                frame_interval=frame_interval,
+                frame_interval_sec=frame_interval_sec,
+                frame_max_size=frame_max_size,
+                n_frames_max=n_frames_max,
+                n_sec_max=n_sec_max
+            )
+        self.config = config
+        self.set_params_from_config(config=config)
+
+
+    def set_params_from_config(
+        self, 
+        config: VideoFrameSplitterConfig
     ):
-        self.start_idx = start_idx
-        self.start_sec = start_sec
-        self.frame_interval = frame_interval
-        self.frame_interval_sec = frame_interval_sec
-        self.n_frames_max = n_frames_max
-        self.n_sec_max = n_sec_max
-        self.frame_max_size = frame_max_size
+        self.start_idx = config.start_idx
+        self.start_sec = config.start_sec
+        self.frame_interval = config.frame_interval
+        self.frame_interval_sec = config.frame_interval_sec
+        self.n_frames_max = config.n_frames_max
+        self.n_sec_max = config.n_sec_max
+        self.frame_max_size = config.frame_max_size
       
     
     def __call__(
@@ -154,7 +184,17 @@ class VideoFrameSplitter:
 
         all_selected_frames = None
         if scene_list is not None:
+            if not scene_list:
+                scene_list = [
+                    SceneData(
+                        scene_id=0,
+                        start_frame=0,
+                        end_frame=n_frames_total,
+                    )
+                ]
+
             all_selected_frames = []
+            all_selected_scene_ids = []
             for scene in scene_list:
                 start_scene_idx = scene.start_frame
                 end_scene_idx = scene.end_frame
@@ -171,6 +211,8 @@ class VideoFrameSplitter:
                 )
 
                 all_selected_frames += selected_frame_idxs
+                all_selected_scene_ids += [scene.scene_id] * len(selected_frame_idxs)
+
             n_frames = len(all_selected_frames)
             frame_interval = None
             frame_interval_sec = None
@@ -197,29 +239,39 @@ class VideoFrameSplitter:
                 break
             
             is_selected_frame = False
+            scene_id = None
             if all_selected_frames is not None:
                 if frame_idx in all_selected_frames:
                     is_selected_frame = True
+                    scene_list_idx = all_selected_frames.index(frame_idx)
+                    scene_id = all_selected_scene_ids[scene_list_idx]
             else:
                 is_selected_frame = (frame_idx % frame_interval) == 0
             
             if is_selected_frame:
-                success, frame = video.retrieve()
+                success, image = video.retrieve()
                 if not success:
                     break
                     
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                timestamp = frame_idx / fps
+
                 if resize_scale != 1:
-                    frame = cv2.resize(
-                        frame, 
+                    image = cv2.resize(
+                        image, 
                         (0, 0),
                         fx=resize_scale, 
                         fy=resize_scale
                     )
-                
-                frame_indexes.append(frame_idx)
-                frames.append(frame)
+
+                frame_data = VideoFrame(
+                    image=image,
+                    idx=frame_idx,
+                    timestamp=timestamp,
+                    scene_id=scene_id
+                )
+
+                frames.append(frame_data)
                 frame_count += 1
                 pbar.update(1)
             frame_idx += 1
@@ -227,7 +279,7 @@ class VideoFrameSplitter:
         video.release()
         pbar.close()
 
-        h, w = frame.shape[:2]
+        h, w = image.shape[:2]
         if frame_interval is not None and fps>0:
             l = len(frames)*frame_interval / fps
         else:

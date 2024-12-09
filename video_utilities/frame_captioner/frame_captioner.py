@@ -5,46 +5,73 @@ from typing import (
     List,
     Dict
 )
+from .config import FrameCaptionerConfig
 
 
 class FrameCaptioner:
     def __init__(
         self,
+        config: Optional[FrameCaptionerConfig] = None,
         model_name: str = 'Salesforce/blip2-opt-2.7b',
         questions: List[str] = ['What is this?'],
         device: str = 'cpu',
         dtype: torch.dtype = torch.float16,
         generation_params: Dict = {},
         prompt: Union[str, List] = 'In this video frame',
-        tags: Union[Dict[str, List[str]], List[str]] = [],
-        tags_desc: Optional[Union[Dict[str, str], str]] = None,
+        tags: Union[Dict[str, Dict[str, str]], List[str]] = [],
         qa_input_template: str = 'Question: {} Answer:',
         tagging_input_template: str = 'Based on the visual content of the video frame, choose the tags that best describe {} what is shown. Provide the results in the form of a list separated by commas. If no tags apply, state "None". \n\nList of tags: \n{}',
         output_template: str = '{} : {}',
-        mode: str = 'simple', # ['simple', 'prompted', 'tagging', 'qa', 'chat']
-        use_quantization: bool = False
+        mode: str = 'simple', # ['simple', 'prompted', 'tagging', 'qa', 'chat', 'tagging_merged']
+        use_quantization: bool = False,
+        attn_implementation: str = 'sdpa'
     ):
-        self.model_name = model_name
-        self.use_quantization = use_quantization
-        self.generation_params = generation_params
-        self.device = device
-        self.dtype = dtype
+        if config is None:
+            config = FrameCaptionerConfig(
+                model_name=model_name,
+                device=device,
+                dtype=dtype,
+                questions=questions,
+                tags=tags,
+                prompt=prompt,
+                mode=mode,
+                use_quantization=use_quantization,
+                generation_params=generation_params,
+                qa_input_template=qa_input_template,
+                tagging_input_template=tagging_input_template,
+                output_template=output_template,
+                attn_implementation=attn_implementation
+            )
+        self.config = config
+        self.set_params_from_config(config)
+        
+
+    def set_params_from_config(
+        self, 
+        config: FrameCaptionerConfig
+    ):
+        self.model_name = config.model_name
+        self.use_quantization = config.use_quantization
+        self.generation_params = config.generation_params
+        self.device = config.device
+        self.dtype = config.dtype
+        self.attn_implementation = config.attn_implementation
 
         model, processor = self.get_model_and_processor(
-            model_name=model_name
+            model_name=config.model_name
         )
 
         self.model = model
         self.processor = processor
         
-        self.set_prompt(prompt)
-        self.set_questions(questions)
-        self.set_qa_input_template(qa_input_template)
-        self.set_tags(tags)
-        self.set_tags_desc(tags_desc)
-        self.set_tagging_input_template(tagging_input_template)
-        self.set_output_template(output_template)
-        self.set_mode(mode)
+        self.set_prompt(config.prompt)
+        self.set_questions(config.questions)
+        self.set_qa_input_template(config.qa_input_template)
+        self.set_tags(config.tags)
+        self.set_tags_desc(config.tags_desc)
+        self.set_tagging_input_template(config.tagging_input_template)
+        self.set_output_template(config.output_template)
+        self.set_mode(config.mode)
 
 
     def get_model_and_processor(
@@ -82,7 +109,7 @@ class FrameCaptioner:
         inputs_image = self.processor(
             images=image,
             return_tensors="pt"
-        ).to(self.model.device, self.dtype)
+        ).to(self.model.device)
         return inputs_image
 
 
@@ -99,7 +126,7 @@ class FrameCaptioner:
             images=image,
             text=text,
             return_tensors="pt"
-        ).to(self.model.device, self.dtype)
+        ).to(self.model.device)
         return inputs
 
 
@@ -157,32 +184,44 @@ class FrameCaptioner:
     
 
     def tagging(self, image):
-        tags_dict = self.tags
-        tags_desc_dict = self.tags_desc
+        tag_categories_dict = self.tags
 
-        if not isinstance(tags_dict, dict):
-            tags_dict = {'general': tags_dict}
-            if tags_desc_dict is not None:
-                tags_desc_dict = {'general': tags_desc_dict}
+        if isinstance(tag_categories_dict, list):
+            tag_categories_dict = dict(
+                general=dict(
+                    tags=tag_categories_dict,
+                    desc=''
+                )
+            )
 
+        categories_input_str_dict = {} 
+        for tag_category, tag_category_dict in tag_categories_dict.items():
+            tag_list = tag_category_dict['tags']
+            tags_cat_desc = tag_category_dict['desc']
+            tag_names_str = ', '.join(tag_list)
+
+            category_input_str = (
+                f'category name: {tag_category}\n' 
+                f'category description: {tags_cat_desc}\n' 
+                f'available tags: [{tag_names_str}]\n'
+            )
+            categories_input_str_dict[tag_category] = category_input_str
+        
         outputs = {}
-        for tags_category, tags_list in tags_dict.items():
-            tag_names_str = '\n'.join(tags_list)
-
-            if tags_desc_dict is not None:
-                if tags_category in tags_desc_dict:
-                    tags_cat_desc = tags_desc_dict[tags_category]
-                else:
-                    tags_cat_desc = ''
-            else:
-                tags_cat_desc = ''
-
-            prompt = self.tagging_input_template.format(tags_cat_desc, tag_names_str)
+        if self.mode == 'tagging_merged':
+            categories_input_str_list = list(categories_input_str_dict.values())
+            categories_input_str = '\n'.join(categories_input_str_list)
+            prompt = self.tagging_input_template.format(input=categories_input_str)
             output = self.generate_output(image, prompt)
-            outputs[tags_category] = output
+            outputs['predictions'] = output
+        else:
+            for tags_category, category_input_str in categories_input_str_dict.items():
+                prompt = self.tagging_input_template.format(input=category_input_str)
+                output = self.generate_output(image, prompt)
+                outputs[tags_category] = output
 
         return outputs
-
+    
 
     def question_answering(self, image):
         outputs = {}
@@ -231,7 +270,7 @@ class FrameCaptioner:
             outputs = self.prompted_frame_captioning(image)
         elif self.mode == 'qa':
             outputs = self.question_answering(image)
-        elif self.mode == 'tagging':
+        elif self.mode in ['tagging', 'tagging_merged']:
             outputs = self.tagging(image)
         elif self.mode == 'chat':
             outputs = self.chat(image)

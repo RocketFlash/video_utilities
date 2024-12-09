@@ -7,7 +7,7 @@ from tqdm.auto import tqdm
 
 class VideoDownloader:
     r"""
-    VideoDownloader downloads video using api
+    VideoDownloader downloads video using specific api
 
     Args:
         url_template (`str`):
@@ -20,6 +20,8 @@ class VideoDownloader:
             Save directory path
         chunk_size (`int`, *optional*, defaults to `4096`):
             Download file chunk size
+        overwrite_if_exist (`bool`, *optional*, defaults to `False`):
+            If True overwrites file if it already exists in the folder
     """
     def __init__(
         self,
@@ -27,13 +29,15 @@ class VideoDownloader:
         secret: str,
         quality: str = 'max',
         save_dir: Union[str, os.PathLike] = './',
-        chunk_size: int = 4096
+        chunk_size: int = 4096,
+        overwrite_if_exist: bool = False
     ):
         self.url_template = url_template
         self.secret = secret
         self.quality = quality
         self.save_dir = Path(save_dir)
         self.chunk_size = chunk_size
+        self.overwrite_if_exist = overwrite_if_exist
 
 
     def get_download_links(
@@ -84,6 +88,10 @@ class VideoDownloader:
             video_name = video_url.split('/')[-1]
             save_name = f'{id_name}_{video_name}'
             save_path = self.save_dir / save_name
+
+            if save_path.is_file() and not self.overwrite_if_exist:
+                print(f"Video already exists in {save_path}")
+                return
     
             response = requests.get(video_url, stream=True)
             total_size = int(response.headers.get('content-length', 0))

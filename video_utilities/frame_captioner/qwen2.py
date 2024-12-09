@@ -31,7 +31,7 @@ class Qwen2VLFrameCaptioner(FrameCaptioner):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
             model_name,
             torch_dtype=self.dtype,
-            attn_implementation="flash_attention_2",
+            attn_implementation=self.attn_implementation,
             device_map=self.device,
         )
 
@@ -59,7 +59,7 @@ class Qwen2VLFrameCaptioner(FrameCaptioner):
             videos=video_inputs,
             padding=True,
             return_tensors="pt",
-        ).to(self.model.device, self.dtype)
+        ).to(self.model.device)
         return inputs
 
 
