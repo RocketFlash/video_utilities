@@ -254,7 +254,7 @@ class VideoFrameSplitter:
                     break
                     
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                timestamp = frame_idx / fps
+                timestamp = round(frame_idx / fps, 3)
 
                 if resize_scale != 1:
                     image = cv2.resize(

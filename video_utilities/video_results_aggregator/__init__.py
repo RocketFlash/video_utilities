@@ -1,19 +1,42 @@
 from collections import defaultdict
+from dataclasses import asdict
+import json
 
 
 class VideoResultsAggregator:
-    def aggregate(self, outputs):
-        return outputs
+    def aggregate(self, results):
+        frame_idxs = []
+        scene_ids = []
+        timestamps = []
+        all_outputs = defaultdict(list)
+
+        for frame_result in results:
+            frame_idxs.append(frame_result.frame_idx)
+            scene_ids.append(frame_result.scene_id)
+            timestamps.append(frame_result.timestamp)
+            for k, v in frame_result.outputs.items():
+                all_outputs[k].append(v)
+        all_outputs = dict(all_outputs)
+
+        return dict(
+            frame_idxs=frame_idxs,
+            scene_ids=scene_ids,
+            timestamps=timestamps,
+            outputs=all_outputs
+        )
 
 
-    def aggregate(self, outputs):
-        results = defaultdict(list)
+    def to_json(
+        self,
+        outputs
+    ):
+        outputs_processed = []
+        for x in outputs:
+            outputs_processed.append(asdict(x))
 
-        for frame_outputs in outputs:
-            for k, v in frame_outputs.items():
-                results[k].append(v)
+        output_json = json.dumps(outputs_processed, indent=4)
 
-        return dict(results)
+        return output_json
 
 
     def __call__(

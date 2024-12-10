@@ -14,4 +14,4 @@ class VideoFrameSplitterConfig():
     frame_interval_sec: Optional[float] = 1
     frame_max_size: Optional[int] = 512
     n_frames_max: Optional[int] = None
-    n_sec_max: Optional[float] = 30
+    n_sec_max: Optional[float] = None

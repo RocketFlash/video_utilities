@@ -11,10 +11,17 @@ from .video_scene_detector import (
     VideoSceneDetector,
     VideoSceneDetectorConfig
 )
-from .frame_output_processor import (
-    FrameOutputProcessor
+from .vlm_output_processor import (
+    VLMOutputProcessor
+)
+from .vlm_output_validator import (
+    TaggingOutputValidator
 )
 from .video_results_aggregator import (
     VideoResultsAggregator
 )
 from .video_captioner import VideoCaptioner
+
+from .pipeline import (
+    TaggingPipeline
+)

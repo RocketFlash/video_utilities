@@ -10,27 +10,32 @@ from typing import (
 
 
 @dataclass
-class VideoFrameOutput:
-    image: np.ndarray
-    idx: int
+class VideoFrameOutputResult:
+    frame_idx: int
     timestamp: float
     scene_id: Optional[int]
+    outputs: dict
 
 
 class VideoCaptioner:
     def __init__(
         self,
         frame_captioner,
-        frame_output_processor = None,
+        vlm_output_processor = None,
+        vlm_output_validator = None
     ):
         self.set_frame_captioner(frame_captioner)
-        self.set_frame_output_processor(frame_output_processor)
+        self.set_vlm_output_processor(vlm_output_processor)
+        self.set_vlm_output_validator(vlm_output_validator)
 
     def set_frame_captioner(self, frame_captioner):
         self.frame_captioner = frame_captioner
 
-    def set_frame_output_processor(self, frame_output_processor):
-        self.frame_output_processor = frame_output_processor
+    def set_vlm_output_processor(self, vlm_output_processor):
+        self.vlm_output_processor = vlm_output_processor
+
+    def set_vlm_output_validator(self, vlm_output_validator):
+        self.vlm_output_validator = vlm_output_validator
 
     def set_mode(self, mode):
         self.frame_captioner.set_mode(mode)
@@ -61,8 +66,20 @@ class VideoCaptioner:
         frames_results = []
 
         for frame in tqdm(frames):
-            outputs = self.frame_captioner(frame)
-            if self.frame_output_processor is not None:
+            if isinstance(frame, np.ndarray):
+                image = frame
+                frame_idx = None
+                timestamp = None
+                scene_id  = None
+            else:
+                image = frame.image
+                frame_idx = frame.idx
+                timestamp = frame.timestamp
+                scene_id  = frame.scene_id
+
+            outputs = self.frame_captioner(image)
+
+            if self.vlm_output_processor is not None:
                 outputs_processed = {}
                 for k, v in outputs.items():
                     if isinstance(expected_output_type, str):
@@ -70,11 +87,27 @@ class VideoCaptioner:
                     else:
                         exp_out_type = expected_output_type[k]
 
-                    outputs_processed[k] = self.frame_output_processor(
+                    output_processed = self.vlm_output_processor(
                         v,
                         expected_output_type=exp_out_type
                     )
-                outputs = outputs_processed
-            frames_results.append(outputs)
+                    if self.vlm_output_validator is not None:
+                        output_processed = self.vlm_output_validator(output_processed)
+                    outputs_processed[k] = output_processed 
+                if self.frame_captioner.mode == 'tagging':
+                    outputs = {}
+                    for k, v in outputs_processed.items():
+                        outputs[k] = v[k]
+                elif self.frame_captioner.mode == 'tagging_merged':
+                    outputs = outputs_processed['predictions']
+                else:
+                    outputs = outputs_processed
+            video_frame_output_result = VideoFrameOutputResult(
+                frame_idx=frame_idx,
+                timestamp=timestamp,
+                scene_id=scene_id,
+                outputs=outputs
+            )
+            frames_results.append(video_frame_output_result)
 
         return frames_results
