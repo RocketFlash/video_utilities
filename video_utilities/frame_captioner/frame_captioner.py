@@ -13,7 +13,7 @@ class FrameCaptioner:
         self,
         config: Optional[FrameCaptionerConfig] = None,
         model_name: str = 'Salesforce/blip2-opt-2.7b',
-        questions: List[str] = ['What is this?'],
+        questions: Union[List[str], Dict[str, Dict]] = ['What is this?'],
         device: str = 'cpu',
         dtype: torch.dtype = torch.float16,
         generation_params: Dict = {},
@@ -24,7 +24,9 @@ class FrameCaptioner:
         output_template: str = '{} : {}',
         mode: str = 'simple', # ['simple', 'prompted', 'tagging', 'qa', 'chat', 'tagging_merged']
         use_quantization: bool = False,
-        attn_implementation: str = 'sdpa'
+        attn_implementation: str = 'sdpa',
+        pose_predictor = None,
+        process_frames_only_with_people: bool = False
     ):
         if config is None:
             config = FrameCaptionerConfig(
@@ -44,6 +46,8 @@ class FrameCaptioner:
             )
         self.config = config
         self.set_params_from_config(config)
+        self.pose_predictor = pose_predictor
+        self.process_frames_only_with_people = process_frames_only_with_people
         
 
     def set_params_from_config(
@@ -104,6 +108,11 @@ class FrameCaptioner:
     def set_output_template(self, output_template):
         self.output_template = output_template
 
+    def set_pose_predictor(self, pose_predictor):
+        self.pose_predictor = pose_predictor
+
+    def set_process_frames_only_with_people(self, process_frames_only_with_people):
+        self.process_frames_only_with_people = process_frames_only_with_people
 
     def process_image(self, image):
         inputs_image = self.processor(
@@ -190,14 +199,14 @@ class FrameCaptioner:
             tag_categories_dict = dict(
                 general=dict(
                     tags=tag_categories_dict,
-                    desc=''
+                    description=''
                 )
             )
 
         categories_input_str_dict = {} 
         for tag_category, tag_category_dict in tag_categories_dict.items():
             tag_list = tag_category_dict['tags']
-            tags_cat_desc = tag_category_dict['desc']
+            tags_cat_desc = tag_category_dict['description']
             tag_names_str = ', '.join(tag_list)
 
             category_input_str = (
@@ -226,13 +235,47 @@ class FrameCaptioner:
     def question_answering(self, image):
         outputs = {}
 
-        for question in self.questions:
-            if question is None:
-                continue
+        question_categories_dict = self.questions
 
-            prompt = self.qa_input_template.format(question)
+        if isinstance(question_categories_dict, list):
+            questions_list = question_categories_dict
+            question_categories_dict = {}
+
+            for i, question in enumerate(questions_list):
+                question_category = f'question_{i}'
+                question_categories_dict[question_category] = dict(
+                    question=question,
+                    instruction='',
+                    expected_output_type='str',
+                    validation_params=None
+                )
+        
+        categories_input_str_dict = {}
+        for question_category, question_category_dict in question_categories_dict.items():
+            question = question_category_dict['question']
+            question_category_desc = question_category_dict['description']
+            instruction = question_category_dict['instruction']
+
+            category_input_str = (
+                f'category name: {question_category}\n' 
+                f'category description: {question_category_desc}\n'
+                f'question: {question}\n' 
+                f'instruction: {instruction}\n' 
+            )
+            categories_input_str_dict[question_category] = category_input_str
+        
+        outputs = {}
+        if self.mode == 'qa_merged':
+            categories_input_str_list = list(categories_input_str_dict.values())
+            categories_input_str = '\n'.join(categories_input_str_list)
+            prompt = self.qa_input_template.format(input=categories_input_str)
             output = self.generate_output(image, prompt)
-            outputs[question] = output
+            outputs['predictions'] = output
+        else:
+            for question_category, category_input_str in categories_input_str_dict.items():
+                prompt = self.qa_input_template.format(input=category_input_str)
+                output = self.generate_output(image, prompt)
+                outputs[question_category] = output
 
         return outputs
 
@@ -266,9 +309,25 @@ class FrameCaptioner:
 
 
     def __call__(self, image):
+        if self.process_frames_only_with_people:
+            is_frame_with_people = False
+            if self.pose_predictor is not None:
+                result_pose_estimation = self.pose_predictor([image])[0]
+                landmarks_2d = result_pose_estimation.landmarks_2d
+                if landmarks_2d is not None:
+                    if len(landmarks_2d) > 0:
+                        is_frame_with_people = True
+
+            if not is_frame_with_people:
+                if 'merged' in self.mode:
+                    outputs = dict(predictions='')
+                else:
+                    outputs = dict()
+                return outputs
+
         if self.mode == 'prompted':
             outputs = self.prompted_frame_captioning(image)
-        elif self.mode == 'qa':
+        elif self.mode in ['qa', 'qa_merged']:
             outputs = self.question_answering(image)
         elif self.mode in ['tagging', 'tagging_merged']:
             outputs = self.tagging(image)

@@ -1,1 +1,2 @@
 from .tagging_validator import TaggingOutputValidator
+from .qa_validator import QAOutputValidator

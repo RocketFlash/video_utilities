@@ -1,21 +1,27 @@
 import cv2
+import json
 import numpy as np
 from IPython.display import display
 from PIL import Image
 import ipywidgets as widgets
 from ..video_frame_splitter import VideoFrame
+from ..video_captioner import VideoFrameOutputResult
 from typing import (
     Union, 
     Optional,
     List, 
     Dict
 )
+from pathlib import Path
+import matplotlib.pyplot as plt
+from collections import Counter
 
 
 def visualize_frames(
     frames: Union[List[np.ndarray], List[VideoFrame]],
     frame_max_size: Optional[int] = None,
     frame_captioner=None,
+    frames_results: Optional[List[VideoFrameOutputResult]] = None
 ):
     n_frames = len(frames)
     is_video_frame_format = False
@@ -67,7 +73,7 @@ def visualize_frames(
     if is_video_frame_format:
         wgts_frame_info = [timestamp_label, frame_idx_label, scene_id_label]
 
-    if frame_captioner is not None:
+    if frame_captioner is not None or frames_results is not None:
         caption_widget = widgets.Textarea(
             value='',
             description='Caption:',
@@ -76,23 +82,24 @@ def visualize_frames(
                 height=f'{frame_height}px'
             )
         )
-
-        def on_button_click(b):       
-            frame = frames[frame_slider.value]
-            if is_video_frame_format:
-                frame = frame.image
-
-            outputs = frame_captioner(frame)
-            output_strs = frame_captioner.outputs_to_string(outputs)
-            caption = '\n\n'.join(output_strs) 
-            caption_widget.value = caption
-
-        caption_button = widgets.Button(
-            description="Get Caption"
-        )
-        caption_button.on_click(on_button_click)
         wgts_output.append(caption_widget)
-        wgts_interface.append(caption_button)
+
+        if frame_captioner is not None:
+            def on_button_click(b):       
+                frame = frames[frame_slider.value]
+                if is_video_frame_format:
+                    frame = frame.image
+
+                outputs = frame_captioner(frame)
+                output_strs = frame_captioner.outputs_to_string(outputs)
+                caption = '\n\n'.join(output_strs) 
+                caption_widget.value = caption
+
+            caption_button = widgets.Button(
+                description="Get Caption"
+            )
+            caption_button.on_click(on_button_click)     
+            wgts_interface.append(caption_button)
 
     display(
         widgets.VBox([
@@ -122,5 +129,15 @@ def visualize_frames(
         img = Image.fromarray(frame)
         image_widget.value = img._repr_jpeg_()
 
+        if frames_results is not None:
+            outputs = frames_results[frame_slider.value].outputs
+            if outputs is not None:
+                outputs_str = json.dumps(outputs, indent=4)
+            else:
+                outputs_str = 'Something wrong with inference'
+            caption_widget.value = outputs_str
+
     frame_slider.observe(view_frame, names='value')
     view_frame(None)
+
+

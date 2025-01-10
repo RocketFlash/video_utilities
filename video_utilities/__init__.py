@@ -1,4 +1,6 @@
 from .video_frame_splitter import (
+    VideoFrame,
+    VideoFramesData,
     VideoFrameSplitter,
     VideoFrameSplitterConfig
 )
@@ -15,13 +17,23 @@ from .vlm_output_processor import (
     VLMOutputProcessor
 )
 from .vlm_output_validator import (
-    TaggingOutputValidator
+    TaggingOutputValidator,
+    QAOutputValidator
+    
 )
 from .video_results_aggregator import (
     VideoResultsAggregator
 )
-from .video_captioner import VideoCaptioner
+from .video_captioner import (
+    VideoCaptioner,
+    VideoFrameOutputResult
+)
 
 from .pipeline import (
-    TaggingPipeline
+    VideoPipeline
+)
+
+from .pose_predictor import (
+    get_pose_predictor,
+    YOLOUltralyticsConfig
 )

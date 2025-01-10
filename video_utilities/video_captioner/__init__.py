@@ -78,7 +78,7 @@ class VideoCaptioner:
                 scene_id  = frame.scene_id
 
             outputs = self.frame_captioner(image)
-
+              
             if self.vlm_output_processor is not None:
                 outputs_processed = {}
                 for k, v in outputs.items():
@@ -94,14 +94,16 @@ class VideoCaptioner:
                     if self.vlm_output_validator is not None:
                         output_processed = self.vlm_output_validator(output_processed)
                     outputs_processed[k] = output_processed 
-                if self.frame_captioner.mode == 'tagging':
-                    outputs = {}
-                    for k, v in outputs_processed.items():
-                        outputs[k] = v[k]
-                elif self.frame_captioner.mode == 'tagging_merged':
-                    outputs = outputs_processed['predictions']
+                if self.frame_captioner.mode.split('_')[0] in ['tagging', 'qa']:
+                    if 'merged' in self.frame_captioner.mode:
+                        outputs = outputs_processed['predictions']
+                    else:
+                        outputs = {}
+                        for k, v in outputs_processed.items():
+                            outputs[k] = v[k]
                 else:
                     outputs = outputs_processed
+
             video_frame_output_result = VideoFrameOutputResult(
                 frame_idx=frame_idx,
                 timestamp=timestamp,

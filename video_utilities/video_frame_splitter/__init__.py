@@ -25,7 +25,6 @@ class VideoFrame:
 @dataclass
 class VideoFramesData:
     frames: List
-    frame_indexes: List
     w_orig: int
     h_orig: int
     w: int
@@ -136,7 +135,6 @@ class VideoFrameSplitter:
         n_frames_per_scene: Optional[int] = 1,
     ):
         frames = []
-        frame_indexes = []
 
         video = cv2.VideoCapture(str(video_path))
         
@@ -287,7 +285,6 @@ class VideoFrameSplitter:
 
         video_frames_data = VideoFramesData(
             frames=frames,
-            frame_indexes=frame_indexes,
             w_orig=w_orig,
             h_orig=h_orig,
             w=w,

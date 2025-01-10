@@ -1,1 +1,1 @@
-from .tagging_pipeline import TaggingPipeline
+from .video_pipeline import VideoPipeline
