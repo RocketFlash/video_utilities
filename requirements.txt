@@ -1,0 +1,9 @@
+opencv-python
+transformers
+scenedetect
+accelerate
+optimum
+auto-gptq
+numpy
+qwen_vl_utils
+ultralytics

@@ -1,6 +1,6 @@
 import click
 from pathlib import Path
-from src.video_downloader import VideoDownloader
+from video_utilities.video_downloader import VideoDownloader
 
 
 @click.command()
