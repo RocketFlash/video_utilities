@@ -4,7 +4,6 @@ from transformers import (
     AutoProcessor,
     LlavaForConditionalGeneration
 )
-from transformers import BitsAndBytesConfig
 from .frame_captioner import FrameCaptioner
 
 
@@ -13,24 +12,11 @@ class PixtralFrameCaptioner(FrameCaptioner):
         self,
         model_name: str,
     ):
-        if self.use_quantization:
-            quantization_config = BitsAndBytesConfig(
-                load_in_8bit=True,
-                # load_in_4bit=True,
-                # bnb_4bit_compute_dtype=torch.bfloat16,
-                # bnb_4bit_quant_type="nf4"
-            )
-            model = LlavaForConditionalGeneration.from_pretrained(
-                model_name, 
-                device_map=self.device, 
-                torch_dtype=self.dtype, 
-                quantization_config=quantization_config)
-        else:
-            model = LlavaForConditionalGeneration.from_pretrained(
-                model_name,
-                use_safetensors=True,
-                device_map=self.device
-            ).eval()
+        model = LlavaForConditionalGeneration.from_pretrained(
+            model_name,
+            use_safetensors=True,
+            device_map=self.device
+        ).eval()
         processor = AutoProcessor.from_pretrained(model_name)
         return model, processor
 

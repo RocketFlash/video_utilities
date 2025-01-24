@@ -11,10 +11,15 @@ class OvisFrameCaptioner(FrameCaptioner):
         self,
         model_name: str,
     ):
+        if 'multimodal_max_length' in self.additional_params:
+            multimodal_max_length = self.additional_params['multimodal_max_length']
+        else:
+            multimodal_max_length = 8192
+
         model = AutoModelForCausalLM.from_pretrained(
-            "AIDC-AI/Ovis1.6-Gemma2-9B",
+            model_name,
             torch_dtype=self.dtype,
-            multimodal_max_length=8192,
+            multimodal_max_length=multimodal_max_length,
             trust_remote_code=True
         ).eval()
         model = model.to(self.device)
@@ -32,9 +37,6 @@ class OvisFrameCaptioner(FrameCaptioner):
 
 
     def process_image_and_text(self, image, text):
-        # if text is None:
-        #     text = ''
-
         query = f'<image>\n{text}'
         image = Image.fromarray(image)
 

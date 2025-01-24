@@ -1,3 +1,4 @@
+from .frame_captioner import FrameCaptioner
 from .blip2 import BLIP2FrameCaptioner
 from .pixtral import PixtralFrameCaptioner
 from .ovis import OvisFrameCaptioner
@@ -5,6 +6,7 @@ from .llama3 import Llam3VLFrameCaptioner
 from .qwen2 import Qwen2VLFrameCaptioner
 from .paligemma import PaliGemma2FrameCaptioner
 from .config import FrameCaptionerConfig
+from .internvl import InternVLFrameCaptioner
 
 
 def get_frame_captioner(
@@ -21,5 +23,7 @@ def get_frame_captioner(
         return OvisFrameCaptioner(config)
     elif 'pixtral' in model_name_lower:
         return PixtralFrameCaptioner(config)
+    elif 'internvl' in model_name_lower:
+        return InternVLFrameCaptioner(config)
     else:
         return BLIP2FrameCaptioner(config)

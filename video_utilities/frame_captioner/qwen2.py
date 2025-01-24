@@ -27,11 +27,17 @@ class Qwen2VLFrameCaptioner(FrameCaptioner):
         self,
         model_name: str,
     ):
+    
+        if 'attn_implementation' in self.additional_params:
+            attn_implementation = self.additional_params['attn_implementation']
+        else:
+            attn_implementation = 'flash_attention_2'
+
         processor = AutoProcessor.from_pretrained(model_name)
         model = Qwen2VLForConditionalGeneration.from_pretrained(
             model_name,
             torch_dtype=self.dtype,
-            attn_implementation=self.attn_implementation,
+            attn_implementation=attn_implementation,
             device_map=self.device,
         )
 

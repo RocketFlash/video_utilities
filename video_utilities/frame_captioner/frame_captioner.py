@@ -11,72 +11,34 @@ from .config import FrameCaptionerConfig
 class FrameCaptioner:
     def __init__(
         self,
-        config: Optional[FrameCaptionerConfig] = None,
-        model_name: str = 'Salesforce/blip2-opt-2.7b',
-        questions: Union[List[str], Dict[str, Dict]] = ['What is this?'],
-        device: str = 'cpu',
-        dtype: torch.dtype = torch.float16,
-        generation_params: Dict = {},
-        prompt: Union[str, List] = 'In this video frame',
-        tags: Union[Dict[str, Dict[str, str]], List[str]] = [],
-        qa_input_template: str = 'Question: {} Answer:',
-        tagging_input_template: str = 'Based on the visual content of the video frame, choose the tags that best describe {} what is shown. Provide the results in the form of a list separated by commas. If no tags apply, state "None". \n\nList of tags: \n{}',
-        output_template: str = '{} : {}',
-        mode: str = 'simple', # ['simple', 'prompted', 'tagging', 'qa', 'chat', 'tagging_merged']
-        use_quantization: bool = False,
-        attn_implementation: str = 'sdpa',
-        pose_predictor = None,
-        process_frames_only_with_people: bool = False
+        config = None,
     ):
         if config is None:
-            config = FrameCaptionerConfig(
-                model_name=model_name,
-                device=device,
-                dtype=dtype,
-                questions=questions,
-                tags=tags,
-                prompt=prompt,
-                mode=mode,
-                use_quantization=use_quantization,
-                generation_params=generation_params,
-                qa_input_template=qa_input_template,
-                tagging_input_template=tagging_input_template,
-                output_template=output_template,
-                attn_implementation=attn_implementation
-            )
+            config = self.get_default_config()
         self.config = config
         self.set_params_from_config(config)
-        self.pose_predictor = pose_predictor
-        self.process_frames_only_with_people = process_frames_only_with_people
-        
+
+        model, processor = self.get_model_and_processor(
+            model_name=self.model_name
+        )
+        self.model = model
+        self.processor = processor
+
+        # self.pose_predictor = pose_predictor
+        # self.process_frames_only_with_people = process_frames_only_with_people
+    
+    def get_default_config(
+        self,
+    ):
+        return FrameCaptionerConfig()
 
     def set_params_from_config(
         self, 
         config: FrameCaptionerConfig
     ):
-        self.model_name = config.model_name
-        self.use_quantization = config.use_quantization
-        self.generation_params = config.generation_params
-        self.device = config.device
-        self.dtype = config.dtype
-        self.attn_implementation = config.attn_implementation
-
-        model, processor = self.get_model_and_processor(
-            model_name=config.model_name
-        )
-
-        self.model = model
-        self.processor = processor
+        for key, value in vars(config).items():
+            setattr(self, key, value)
         
-        self.set_prompt(config.prompt)
-        self.set_questions(config.questions)
-        self.set_qa_input_template(config.qa_input_template)
-        self.set_tags(config.tags)
-        self.set_tags_desc(config.tags_desc)
-        self.set_tagging_input_template(config.tagging_input_template)
-        self.set_output_template(config.output_template)
-        self.set_mode(config.mode)
-
 
     def get_model_and_processor(
         self,
@@ -93,9 +55,6 @@ class FrameCaptioner:
     def set_tags(self, tags):
         self.tags = tags
 
-    def set_tags_desc(self, tags_desc):
-        self.tags_desc = tags_desc
-
     def set_questions(self, questions):
         self.questions = questions
 
@@ -111,8 +70,8 @@ class FrameCaptioner:
     def set_pose_predictor(self, pose_predictor):
         self.pose_predictor = pose_predictor
 
-    def set_process_frames_only_with_people(self, process_frames_only_with_people):
-        self.process_frames_only_with_people = process_frames_only_with_people
+    # def set_process_frames_only_with_people(self, process_frames_only_with_people):
+    #     self.process_frames_only_with_people = process_frames_only_with_people
 
     def process_image(self, image):
         inputs_image = self.processor(
@@ -309,21 +268,21 @@ class FrameCaptioner:
 
 
     def __call__(self, image):
-        if self.process_frames_only_with_people:
-            is_frame_with_people = False
-            if self.pose_predictor is not None:
-                result_pose_estimation = self.pose_predictor([image])[0]
-                landmarks_2d = result_pose_estimation.landmarks_2d
-                if landmarks_2d is not None:
-                    if len(landmarks_2d) > 0:
-                        is_frame_with_people = True
+        # if self.process_frames_only_with_people:
+        #     is_frame_with_people = False
+        #     if self.pose_predictor is not None:
+        #         result_pose_estimation = self.pose_predictor([image])[0]
+        #         landmarks_2d = result_pose_estimation.landmarks_2d
+        #         if landmarks_2d is not None:
+        #             if len(landmarks_2d) > 0:
+        #                 is_frame_with_people = True
 
-            if not is_frame_with_people:
-                if 'merged' in self.mode:
-                    outputs = dict(predictions='')
-                else:
-                    outputs = dict()
-                return outputs
+        #     if not is_frame_with_people:
+        #         if 'merged' in self.mode:
+        #             outputs = dict(predictions='')
+        #         else:
+        #             outputs = dict()
+        #         return outputs
 
         if self.mode == 'prompted':
             outputs = self.prompted_frame_captioning(image)

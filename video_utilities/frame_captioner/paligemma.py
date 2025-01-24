@@ -15,7 +15,6 @@ class PaliGemma2FrameCaptioner(FrameCaptioner):
             model_name,
             device_map=self.device,
             torch_dtype=self.dtype,
-            revision="bfloat16"
         ).eval()
 
         return model, processor

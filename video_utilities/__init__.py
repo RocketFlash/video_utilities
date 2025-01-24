@@ -7,6 +7,7 @@ from .video_frame_splitter import (
 from .video_downloader import VideoDownloader
 from .frame_captioner import (
     get_frame_captioner, 
+    FrameCaptioner,
     FrameCaptionerConfig
 )
 from .video_scene_detector import (
