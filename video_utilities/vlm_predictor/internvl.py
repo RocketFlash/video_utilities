@@ -10,7 +10,7 @@ import torchvision.transforms as T
 from PIL import Image
 from torchvision.transforms.functional import InterpolationMode
 from ..utils import get_value_if_not_none
-from .frame_captioner import FrameCaptioner
+from .vlm_predictor import VLMPredictor
 
 
 def find_closest_aspect_ratio(
@@ -80,7 +80,7 @@ def dynamic_preprocess(
     return processed_images
 
 
-class InternVLFrameCaptioner(FrameCaptioner):
+class InternVL_VLMPredictor(VLMPredictor):
     def get_model_and_processor(
         self,
         model_name: str,

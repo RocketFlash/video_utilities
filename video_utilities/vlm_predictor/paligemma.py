@@ -2,10 +2,10 @@ from transformers import (
     AutoProcessor,
     PaliGemmaForConditionalGeneration,
 )
-from .frame_captioner import FrameCaptioner
+from .vlm_predictor import VLMPredictor
 
 
-class PaliGemma2FrameCaptioner(FrameCaptioner):
+class PaliGemma2_VLMPredictor(VLMPredictor):
     def get_model_and_processor(
         self,
         model_name: str,

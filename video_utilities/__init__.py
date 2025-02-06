@@ -5,10 +5,10 @@ from .video_frame_splitter import (
     VideoFrameSplitterConfig
 )
 from .video_downloader import VideoDownloader
-from .frame_captioner import (
-    get_frame_captioner, 
-    FrameCaptioner,
-    FrameCaptionerConfig
+from .vlm_predictor import (
+    get_vlm_predictor, 
+    VLMPredictor,
+    VLMPredictorConfig
 )
 from .video_scene_detector import (
     VideoSceneDetector,

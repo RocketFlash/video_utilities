@@ -7,7 +7,6 @@ from typing import (
     Dict
 )
 
-
 DEFAULT_GENERATION_PARAMS = dict(
     min_length=20,
     max_length=512,
@@ -15,9 +14,11 @@ DEFAULT_GENERATION_PARAMS = dict(
     repetition_penalty=1.5,
     temperature=1
 )
+
 DEFAULT_QUESTIONS = [
     'What is this?'
 ]
+
 DEFAULT_TAGS = dict(
     location=dict(
         description='scene of action, location',
@@ -30,10 +31,11 @@ DEFAULT_TAGS = dict(
 
 
 @dataclass
-class FrameCaptionerConfig():
+class VLMPredictorConfig():
     model_name: str = 'Salesforce/blip2-opt-2.7b'
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     dtype: torch.dtype = torch.float16
+    input_content_type: str = 'images' # one of ['images', 'video']
     questions: Union[List[str], Dict[str, Dict]] = field(default_factory=lambda: DEFAULT_QUESTIONS) 
     tags: Union[Dict[str, Dict[str, str]], List[str]] = field(default_factory=lambda: DEFAULT_TAGS)
     prompt: str = 'In this video frame'

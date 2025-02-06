@@ -1,10 +1,10 @@
 from openai import OpenAI
 import numpy as np
 from PIL import Image
-from .frame_captioner import FrameCaptioner
+from .vlm_predictor import VLMPredictor
 
 
-class DeepSeekAPIFrameCaptioner(FrameCaptioner):
+class DeepSeekAPI_VLMPredictor(VLMPredictor):
 
     def get_model_and_processor(
         self,

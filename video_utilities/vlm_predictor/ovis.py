@@ -3,10 +3,10 @@ from PIL import Image
 from transformers import (
     AutoModelForCausalLM,
 )
-from .frame_captioner import FrameCaptioner
+from .vlm_predictor import VLMPredictor
 
 
-class OvisFrameCaptioner(FrameCaptioner):
+class Ovis_VLMPredictor(VLMPredictor):
     def get_model_and_processor(
         self,
         model_name: str,

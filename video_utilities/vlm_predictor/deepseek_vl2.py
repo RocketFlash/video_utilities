@@ -8,10 +8,10 @@ from deepseek_vl.models import (
     DeepseekVLV2ForCausalLM
 )
 
-from .frame_captioner import FrameCaptioner
+from .vlm_predictor import VLMPredictor
 
 
-class DeepSeekVL2FrameCaptioner(FrameCaptioner):
+class DeepSeekVL2_VLMPredictor(VLMPredictor):
     message_template = [
         {
             "role": "<|User|>",

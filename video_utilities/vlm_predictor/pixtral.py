@@ -4,10 +4,10 @@ from transformers import (
     AutoProcessor,
     LlavaForConditionalGeneration
 )
-from .frame_captioner import FrameCaptioner
+from .vlm_predictor import VLMPredictor
 
 
-class PixtralFrameCaptioner(FrameCaptioner):
+class Pixtral_VLMPredictor(VLMPredictor):
     def get_model_and_processor(
         self,
         model_name: str,

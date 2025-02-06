@@ -1,14 +1,15 @@
 import torch
+import numpy as np
 from typing import (
     Union,
     Optional,
     List,
     Dict
 )
-from .config import FrameCaptionerConfig
+from .config import VLMPredictorConfig
 
 
-class FrameCaptioner:
+class VLMPredictor:
     def __init__(
         self,
         config = None,
@@ -26,19 +27,21 @@ class FrameCaptioner:
 
         # self.pose_predictor = pose_predictor
         # self.process_frames_only_with_people = process_frames_only_with_people
-    
-    def get_default_config(
-        self,
-    ):
-        return FrameCaptionerConfig()
+        self.update_qa_categories_input_str_dict()
+        self.update_tagging_categories_input_str_dict()
+
+
+    def get_default_config(self):
+        return VLMPredictorConfig()
+
 
     def set_params_from_config(
         self, 
-        config: FrameCaptionerConfig
+        config: VLMPredictorConfig
     ):
         for key, value in vars(config).items():
             setattr(self, key, value)
-        
+    
 
     def get_model_and_processor(
         self,
@@ -46,36 +49,112 @@ class FrameCaptioner:
     ):
         return None, None
 
+
+    def update_qa_categories_input_str_dict(self):
+        question_categories_dict = self.questions
+
+        if isinstance(question_categories_dict, list):
+            questions_list = question_categories_dict
+            question_categories_dict = {}
+
+            for i, question in enumerate(questions_list):
+                question_category = f'question_{i}'
+                question_categories_dict[question_category] = dict(
+                    question=question,
+                    description='',
+                    instruction='',
+                    expected_output_type='str',
+                    validation_params=None
+                )
+        
+        qa_categories_input_str_dict = {}
+        for question_category, question_category_dict in question_categories_dict.items():
+            question = question_category_dict['question']
+            question_category_desc = question_category_dict['description']
+            instruction = question_category_dict['instruction']
+
+            category_input_str = (
+                f'category name: {question_category}\n' 
+                f'category description: {question_category_desc}\n'
+                f'question: {question}\n' 
+                f'instruction: {instruction}\n' 
+            )
+            qa_categories_input_str_dict[question_category] = category_input_str
+
+        self.qa_categories_input_str_dict = qa_categories_input_str_dict
+
+
+    def update_tagging_categories_input_str_dict(self):
+        tagging_categories_dict = self.tags
+
+        if isinstance(tagging_categories_dict, list):
+            tagging_categories_dict = dict(
+                general=dict(
+                    tags=tagging_categories_dict,
+                    description=''
+                )
+            )
+
+        tagging_categories_input_str_dict = {} 
+        for tag_category, tag_category_dict in tagging_categories_dict.items():
+            tag_list = tag_category_dict['tags']
+            tags_cat_desc = tag_category_dict['description']
+            tag_names_str = ', '.join(tag_list)
+
+            category_input_str = (
+                f'category name: {tag_category}\n' 
+                f'category description: {tags_cat_desc}\n' 
+                f'available tags: [{tag_names_str}]\n'
+            )
+            tagging_categories_input_str_dict[tag_category] = category_input_str
+        self.tagging_categories_input_str_dict = tagging_categories_input_str_dict
+
+
     def set_mode(self, mode):
         self.mode = mode
    
+
+    def set_input_content_type(self, input_content_type):
+        self.input_content_type = input_content_type
+
+
     def set_prompt(self, prompt):
         self.prompt = prompt
 
+
     def set_tags(self, tags):
         self.tags = tags
+        self.update_tagging_categories_input_str_dict()
+
 
     def set_questions(self, questions):
         self.questions = questions
+        self.update_qa_categories_input_str_dict()
+
 
     def set_qa_input_template(self, qa_input_template):
         self.qa_input_template = qa_input_template
 
+
     def set_tagging_input_template(self, tagging_input_template):
         self.tagging_input_template = tagging_input_template
+
 
     def set_output_template(self, output_template):
         self.output_template = output_template
 
+
     def set_pose_predictor(self, pose_predictor):
         self.pose_predictor = pose_predictor
+
 
     # def set_process_frames_only_with_people(self, process_frames_only_with_people):
     #     self.process_frames_only_with_people = process_frames_only_with_people
 
-    def process_image(self, image):
+
+    def process_visual_data(self, visual_data):
         inputs_image = self.processor(
-            images=image,
+            images=visual_data,
             return_tensors="pt"
         ).to(self.model.device)
         return inputs_image
@@ -89,9 +168,13 @@ class FrameCaptioner:
         return inputs_text
 
 
-    def process_image_and_text(self, image, text):
+    def process_visual_data_and_text(
+        self, 
+        visual_data, 
+        text
+    ):
         inputs = self.processor(
-            images=image,
+            images=visual_data,
             text=text,
             return_tensors="pt"
         ).to(self.model.device)
@@ -112,10 +195,14 @@ class FrameCaptioner:
         return generated_text
 
 
-    def generate_output(self, image, prompt):
+    def generate_output(
+        self, 
+        visual_data, 
+        prompt
+    ):
         prompt_len = len(prompt) if prompt is not None else None
-        inputs = self.process_image_and_text(
-            image=image,
+        inputs = self.process_visual_data_and_text(
+            visual_data=visual_data,
             text=prompt
         )
         with torch.inference_mode():
@@ -132,114 +219,61 @@ class FrameCaptioner:
         return generated_text
 
 
-    def simple_frame_captioning(self, image):
-        output = self.generate_output(image, None)
+    def simple_captioning(self, visual_data):
+        output = self.generate_output(visual_data, None)
         outputs = {'caption' : output}
         return outputs
 
 
-    def prompted_frame_captioning(self, image):
+    def prompted_captioning(self, visual_data):
         prompts = self.prompt
         if not isinstance(prompts, list):
             prompts = [prompts]
 
         outputs = {}
         for prompt in prompts:
-            output = self.generate_output(image, prompt)
+            output = self.generate_output(visual_data, prompt)
             outputs[prompt] = output
 
         return outputs
-    
 
-    def tagging(self, image):
-        tag_categories_dict = self.tags
 
-        if isinstance(tag_categories_dict, list):
-            tag_categories_dict = dict(
-                general=dict(
-                    tags=tag_categories_dict,
-                    description=''
-                )
-            )
-
-        categories_input_str_dict = {} 
-        for tag_category, tag_category_dict in tag_categories_dict.items():
-            tag_list = tag_category_dict['tags']
-            tags_cat_desc = tag_category_dict['description']
-            tag_names_str = ', '.join(tag_list)
-
-            category_input_str = (
-                f'category name: {tag_category}\n' 
-                f'category description: {tags_cat_desc}\n' 
-                f'available tags: [{tag_names_str}]\n'
-            )
-            categories_input_str_dict[tag_category] = category_input_str
-        
+    def tagging(self, visual_data):
         outputs = {}
         if self.mode == 'tagging_merged':
-            categories_input_str_list = list(categories_input_str_dict.values())
+            categories_input_str_list = list(self.tagging_categories_input_str_dict.values())
             categories_input_str = '\n'.join(categories_input_str_list)
             prompt = self.tagging_input_template.format(input=categories_input_str)
-            output = self.generate_output(image, prompt)
+            output = self.generate_output(visual_data, prompt)
             outputs['predictions'] = output
         else:
-            for tags_category, category_input_str in categories_input_str_dict.items():
+            for tags_category, category_input_str in self.tagging_categories_input_str_dict.items():
                 prompt = self.tagging_input_template.format(input=category_input_str)
-                output = self.generate_output(image, prompt)
+                output = self.generate_output(visual_data, prompt)
                 outputs[tags_category] = output
 
         return outputs
-    
 
-    def question_answering(self, image):
+
+    def question_answering(self, visual_data):
         outputs = {}
 
-        question_categories_dict = self.questions
-
-        if isinstance(question_categories_dict, list):
-            questions_list = question_categories_dict
-            question_categories_dict = {}
-
-            for i, question in enumerate(questions_list):
-                question_category = f'question_{i}'
-                question_categories_dict[question_category] = dict(
-                    question=question,
-                    instruction='',
-                    expected_output_type='str',
-                    validation_params=None
-                )
-        
-        categories_input_str_dict = {}
-        for question_category, question_category_dict in question_categories_dict.items():
-            question = question_category_dict['question']
-            question_category_desc = question_category_dict['description']
-            instruction = question_category_dict['instruction']
-
-            category_input_str = (
-                f'category name: {question_category}\n' 
-                f'category description: {question_category_desc}\n'
-                f'question: {question}\n' 
-                f'instruction: {instruction}\n' 
-            )
-            categories_input_str_dict[question_category] = category_input_str
-        
-        outputs = {}
         if self.mode == 'qa_merged':
-            categories_input_str_list = list(categories_input_str_dict.values())
+            categories_input_str_list = list(self.qa_categories_input_str_dict.values())
             categories_input_str = '\n'.join(categories_input_str_list)
             prompt = self.qa_input_template.format(input=categories_input_str)
-            output = self.generate_output(image, prompt)
+            output = self.generate_output(visual_data, prompt)
             outputs['predictions'] = output
         else:
-            for question_category, category_input_str in categories_input_str_dict.items():
+            for question_category, category_input_str in self.qa_categories_input_str_dict.items():
                 prompt = self.qa_input_template.format(input=category_input_str)
-                output = self.generate_output(image, prompt)
+                output = self.generate_output(visual_data, prompt)
                 outputs[question_category] = output
 
         return outputs
 
 
-    def chat(self, image):
+    def chat(self, visual_data):
         outputs = {}
         qa_template = self.qa_input_template + ' {}.'
         context = ''
@@ -249,7 +283,7 @@ class FrameCaptioner:
                 continue
 
             prompt = context + self.qa_input_template.format(question)
-            output = self.generate_output(image, prompt)
+            output = self.generate_output(visual_data, prompt)
 
             question_anwer = qa_template.format(question, output)
             context += question_anwer + ' '
@@ -257,7 +291,7 @@ class FrameCaptioner:
             outputs[question] = output
 
         return outputs
-    
+
 
     def outputs_to_string(self, outputs):
         output_strs = []
@@ -267,7 +301,10 @@ class FrameCaptioner:
         return output_strs
 
 
-    def __call__(self, image):
+    def __call__(
+        self, 
+        visual_data: Union[List[np.ndarray], np.ndarray]
+    ):
         # if self.process_frames_only_with_people:
         #     is_frame_with_people = False
         #     if self.pose_predictor is not None:
@@ -285,13 +322,14 @@ class FrameCaptioner:
         #         return outputs
 
         if self.mode == 'prompted':
-            outputs = self.prompted_frame_captioning(image)
+            outputs = self.prompted_captioning(visual_data)
         elif self.mode in ['qa', 'qa_merged']:
-            outputs = self.question_answering(image)
+            outputs = self.question_answering(visual_data)
         elif self.mode in ['tagging', 'tagging_merged']:
-            outputs = self.tagging(image)
+            outputs = self.tagging(visual_data)
         elif self.mode == 'chat':
-            outputs = self.chat(image)
+            outputs = self.chat(visual_data)
         else:
-            outputs = self.simple_frame_captioning(image)
+            outputs = self.simple_captioning(visual_data)
+            
         return outputs

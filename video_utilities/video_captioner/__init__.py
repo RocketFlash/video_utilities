@@ -20,16 +20,16 @@ class VideoFrameOutputResult:
 class VideoCaptioner:
     def __init__(
         self,
-        frame_captioner,
+        vlm_predictor,
         vlm_output_processor = None,
         vlm_output_validator = None
     ):
-        self.set_frame_captioner(frame_captioner)
+        self.set_vlm_predictor(vlm_predictor)
         self.set_vlm_output_processor(vlm_output_processor)
         self.set_vlm_output_validator(vlm_output_validator)
 
-    def set_frame_captioner(self, frame_captioner):
-        self.frame_captioner = frame_captioner
+    def set_vlm_predictor(self, vlm_predictor):
+        self.vlm_predictor = vlm_predictor
 
     def set_vlm_output_processor(self, vlm_output_processor):
         self.vlm_output_processor = vlm_output_processor
@@ -38,25 +38,25 @@ class VideoCaptioner:
         self.vlm_output_validator = vlm_output_validator
 
     def set_mode(self, mode):
-        self.frame_captioner.set_mode(mode)
+        self.vlm_predictor.set_mode(mode)
 
     def set_prompt(self, prompt):
-        self.frame_captioner.set_prompt(prompt)
+        self.vlm_predictor.set_prompt(prompt)
 
     def set_tags(self, tags):
-        self.frame_captioner.set_tags(tags)
+        self.vlm_predictor.set_tags(tags)
 
     def set_tags_desc(self, tags_desc):
-        self.frame_captioner.set_tags_desc(tags_desc)
+        self.vlm_predictor.set_tags_desc(tags_desc)
 
     def set_questions(self, questions):
-        self.frame_captioner.set_questions(questions)
+        self.vlm_predictor.set_questions(questions)
 
     def set_qa_input_template(self, qa_input_template):
-        self.frame_captioner.set_qa_input_template(qa_input_template)
+        self.vlm_predictor.set_qa_input_template(qa_input_template)
 
     def set_tagging_input_template(self, tagging_input_template):
-        self.frame_captioner.set_tagging_input_template(tagging_input_template)
+        self.vlm_predictor.set_tagging_input_template(tagging_input_template)
 
     def __call__(
         self,
@@ -77,7 +77,7 @@ class VideoCaptioner:
                 timestamp = frame.timestamp
                 scene_id  = frame.scene_id
 
-            outputs = self.frame_captioner(image)
+            outputs = self.vlm_predictor(image)
               
             if self.vlm_output_processor is not None:
                 outputs_processed = {}
@@ -94,8 +94,8 @@ class VideoCaptioner:
                     if self.vlm_output_validator is not None:
                         output_processed = self.vlm_output_validator(output_processed)
                     outputs_processed[k] = output_processed 
-                if self.frame_captioner.mode.split('_')[0] in ['tagging', 'qa']:
-                    if 'merged' in self.frame_captioner.mode:
+                if self.vlm_predictor.mode.split('_')[0] in ['tagging', 'qa']:
+                    if 'merged' in self.vlm_predictor.mode:
                         outputs = outputs_processed['predictions']
                     else:
                         outputs = {}
