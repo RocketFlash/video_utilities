@@ -45,3 +45,4 @@ class VLMPredictorConfig():
     tagging_input_template: str = 'Based on the visual content of the video frame, choose the tags that best describe {} what is shown. If no tags apply, state "None". \n\nList of tags: \n{}'
     output_template: str = '{}: {}\n'
     additional_params: dict = field(default_factory=lambda: {})
+    generate_instructions: bool = True

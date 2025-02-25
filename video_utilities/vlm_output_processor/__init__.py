@@ -1,10 +1,5 @@
 import re
-from typing import (
-    Union,
-    Optional,
-    List,
-    Dict
-)
+import ast
 
 
 def parse_value(value):
@@ -46,8 +41,16 @@ class VLMOutputProcessor:
     def __call__(
         self,
         input_string: str,
-        expected_output_type: str
+        expected_output_type: str = 'python_structure'
     ):
+        if expected_output_type=='python_structure':
+            input_string_cleaned = re.sub(r"```(python)?|```", "", input_string).strip()
+            try:
+                return ast.literal_eval(input_string_cleaned)
+            except:
+                if self.verbose:
+                    print(f"Failed to parse: {str(input_string_cleaned)}")
+                return None
 
         input_string = input_string.strip()
 

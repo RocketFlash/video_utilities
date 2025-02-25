@@ -19,8 +19,8 @@ from .vlm_output_processor import (
 )
 from .vlm_output_validator import (
     TaggingOutputValidator,
-    QAOutputValidator
-    
+    QAOutputValidator,
+    PydanticQAOutputValidator
 )
 from .video_results_aggregator import (
     VideoResultsAggregator

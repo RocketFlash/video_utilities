@@ -1,2 +1,3 @@
 from .tagging_validator import TaggingOutputValidator
 from .qa_validator import QAOutputValidator
+from .pydantic_qa_validator import PydanticQAOutputValidator

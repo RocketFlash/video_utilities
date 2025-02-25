@@ -46,9 +46,6 @@ class VideoCaptioner:
     def set_tags(self, tags):
         self.vlm_predictor.set_tags(tags)
 
-    def set_tags_desc(self, tags_desc):
-        self.vlm_predictor.set_tags_desc(tags_desc)
-
     def set_questions(self, questions):
         self.vlm_predictor.set_questions(questions)
 

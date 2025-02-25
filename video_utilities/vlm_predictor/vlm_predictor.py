@@ -7,6 +7,7 @@ from typing import (
     Dict
 )
 from .config import VLMPredictorConfig
+from ..utils import generate_instruction_str
 
 
 class VLMPredictor:
@@ -25,8 +26,6 @@ class VLMPredictor:
         self.model = model
         self.processor = processor
 
-        # self.pose_predictor = pose_predictor
-        # self.process_frames_only_with_people = process_frames_only_with_people
         self.update_qa_categories_input_str_dict()
         self.update_tagging_categories_input_str_dict()
 
@@ -61,24 +60,34 @@ class VLMPredictor:
                 question_category = f'question_{i}'
                 question_categories_dict[question_category] = dict(
                     question=question,
-                    description='',
-                    instruction='',
                     expected_output_type='str',
-                    validation_params=None
                 )
         
         qa_categories_input_str_dict = {}
         for question_category, question_category_dict in question_categories_dict.items():
             question = question_category_dict['question']
-            question_category_desc = question_category_dict['description']
-            instruction = question_category_dict['instruction']
 
-            category_input_str = (
-                f'category name: {question_category}\n' 
-                f'category description: {question_category_desc}\n'
-                f'question: {question}\n' 
-                f'instruction: {instruction}\n' 
-            )
+            instruction_str = ''
+            description_str = ''
+
+            if 'instruction' in question_category_dict:
+                instruction_str = question_category_dict['instruction']
+            else:
+                if self.generate_instructions: 
+                    instruction_str = generate_instruction_str(question_category_dict)
+
+            if 'description' in question_category_dict:
+                description_str = question_category_dict['description']
+            
+
+            category_input_str = f'category name: {question_category}\n'
+            if description_str:
+                category_input_str += f'category description: {description_str}\n'
+            
+            category_input_str += f'question: {question}\n'
+            if instruction_str:
+                category_input_str += f'instruction: {instruction_str}\n'
+                
             qa_categories_input_str_dict[question_category] = category_input_str
 
         self.qa_categories_input_str_dict = qa_categories_input_str_dict
@@ -146,10 +155,6 @@ class VLMPredictor:
 
     def set_pose_predictor(self, pose_predictor):
         self.pose_predictor = pose_predictor
-
-
-    # def set_process_frames_only_with_people(self, process_frames_only_with_people):
-    #     self.process_frames_only_with_people = process_frames_only_with_people
 
 
     def process_visual_data(self, visual_data):
@@ -305,22 +310,6 @@ class VLMPredictor:
         self, 
         visual_data: Union[List[np.ndarray], np.ndarray]
     ):
-        # if self.process_frames_only_with_people:
-        #     is_frame_with_people = False
-        #     if self.pose_predictor is not None:
-        #         result_pose_estimation = self.pose_predictor([image])[0]
-        #         landmarks_2d = result_pose_estimation.landmarks_2d
-        #         if landmarks_2d is not None:
-        #             if len(landmarks_2d) > 0:
-        #                 is_frame_with_people = True
-
-        #     if not is_frame_with_people:
-        #         if 'merged' in self.mode:
-        #             outputs = dict(predictions='')
-        #         else:
-        #             outputs = dict()
-        #         return outputs
-
         if self.mode == 'prompted':
             outputs = self.prompted_captioning(visual_data)
         elif self.mode in ['qa', 'qa_merged']:
