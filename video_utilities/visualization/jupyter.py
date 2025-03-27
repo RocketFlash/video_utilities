@@ -92,9 +92,7 @@ def visualize_frames(
                     frame = frame.image
 
                 outputs = vlm_predictor(frame)
-                output_strs = vlm_predictor.outputs_to_string(outputs)
-                caption = '\n\n'.join(output_strs) 
-                caption_widget.value = caption
+                caption_widget.value = outputs
 
             caption_button = widgets.Button(
                 description="Get Prediction"
@@ -181,6 +179,7 @@ def visualize_scenes(
     grid_canvas_w: int = 512,
     grid_num_cols: int = 3,
     vlm_predictor=None,
+    scene_captions=None
 ):
     n_scenes = len(scene_frames_dict)
     is_video_frame_format = False
@@ -198,6 +197,10 @@ def visualize_scenes(
     scene_id_label = widgets.Label(
         value=f"Scene id: unknown"
     )
+    scene_caption_label = widgets.Label(
+        value=f"Scene caption: unknown"
+    )
+
     scene_slider = widgets.IntSlider(
         value=0,
         min=0,
@@ -213,7 +216,9 @@ def visualize_scenes(
         # height=frame_height
     )
 
-    wgts_imag = [image_widget]
+    if scene_captions is not None:
+        scene_caption_label.value = scene_captions[scene_slider.value]
+
     wgts_interface = [scene_slider]
 
     wgts_frame_info = []
@@ -237,9 +242,7 @@ def visualize_scenes(
                 if is_video_frame_format:
                     scene_images = [frame.image for frame in scene_images]
                 outputs = vlm_predictor(scene_images)
-                output_strs = vlm_predictor.outputs_to_string(outputs)
-                caption = '\n\n'.join(output_strs) 
-                caption_widget.value = caption
+                caption_widget.value = outputs
 
             caption_button = widgets.Button(
                 description="Get Prediction"
@@ -249,6 +252,7 @@ def visualize_scenes(
 
     all_widgets = widgets.VBox([
         image_widget,
+        scene_caption_label,
         widgets.VBox(wgts_frame_info),
         widgets.HBox(wgts_interface),
     ])
@@ -262,6 +266,8 @@ def visualize_scenes(
 
     def view_frame(change):
         scene_images = scene_frames_dict[scene_slider.value]
+        if scene_captions is not None:
+            scene_caption_label.value = scene_captions[scene_slider.value]
 
         if is_video_frame_format:
             scene_start_timestamp = scene_images[0].timestamp

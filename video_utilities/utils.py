@@ -23,15 +23,20 @@ def read_prompt_template(file_path):
     return prompt_template
 
 
-def read_questions_dict(file_path):
+def save_prompt_template(prompt_template, save_path):
+    with open(save_path, "w") as outfile:
+        outfile.write(prompt_template)
+
+
+def read_queries_dict(file_path):
     with open(file_path) as f:
-        questions_dict = json.load(f)
-    return questions_dict
+        queries_dict = json.load(f)
+    return queries_dict
 
 
-def save_questions_dict(questions_dict, save_path):
+def save_queries_dict(queries_dict, save_path):
     with open(save_path, "w") as outfile: 
-        json.dump(questions_dict, outfile, indent=4)
+        json.dump(queries_dict, outfile, indent=4)
 
 
 def generate_instruction_str(category_dict):

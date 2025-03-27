@@ -35,14 +35,9 @@ class VLMPredictorConfig():
     model_name: str = 'Salesforce/blip2-opt-2.7b'
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     dtype: torch.dtype = torch.float16
-    input_content_type: str = 'images' # one of ['images', 'video']
-    questions: Union[List[str], Dict[str, Dict]] = field(default_factory=lambda: DEFAULT_QUESTIONS) 
-    tags: Union[Dict[str, Dict[str, str]], List[str]] = field(default_factory=lambda: DEFAULT_TAGS)
-    prompt: str = 'In this video frame'
-    mode: str = 'simple' # ['simple', 'prompted', 'qa', 'chat']
+    input_content_type: str = 'images' # one of ['images', 'video'] 
     generation_params: dict = field(default_factory=lambda: DEFAULT_GENERATION_PARAMS)
-    qa_input_template: str = 'Question: {} Answer:'
-    tagging_input_template: str = 'Based on the visual content of the video frame, choose the tags that best describe {} what is shown. If no tags apply, state "None". \n\nList of tags: \n{}'
+    prompt_template: str = 'Question: {} Answer:'
     output_template: str = '{}: {}\n'
     additional_params: dict = field(default_factory=lambda: {})
     generate_instructions: bool = True

@@ -26,9 +26,8 @@ class VLMPredictor:
         self.model = model
         self.processor = processor
 
-        self.update_qa_categories_input_str_dict()
-        self.update_tagging_categories_input_str_dict()
-
+        self.queries_dict = None
+        
 
     def get_default_config(self):
         return VLMPredictorConfig()
@@ -49,79 +48,39 @@ class VLMPredictor:
         return None, None
 
 
-    def update_qa_categories_input_str_dict(self):
-        question_categories_dict = self.questions
+    def construct_queries_str(self):
+        if self.queries_dict is None or len(self.queries_dict)==0:
+            return ''
 
-        if isinstance(question_categories_dict, list):
-            questions_list = question_categories_dict
-            question_categories_dict = {}
-
-            for i, question in enumerate(questions_list):
-                question_category = f'question_{i}'
-                question_categories_dict[question_category] = dict(
-                    question=question,
-                    expected_output_type='str',
-                )
-        
-        qa_categories_input_str_dict = {}
-        for question_category, question_category_dict in question_categories_dict.items():
-            question = question_category_dict['question']
+        query_strings_list = []
+        for query_category, query_category_dict in self.queries_dict.items():
+            query = query_category_dict['query']
 
             instruction_str = ''
             description_str = ''
 
-            if 'instruction' in question_category_dict:
-                instruction_str = question_category_dict['instruction']
+            if 'instruction' in query_category_dict:
+                instruction_str = query_category_dict['instruction']
             else:
                 if self.generate_instructions: 
-                    instruction_str = generate_instruction_str(question_category_dict)
+                    instruction_str = generate_instruction_str(query_category_dict)
 
-            if 'description' in question_category_dict:
-                description_str = question_category_dict['description']
+            if 'description' in query_category_dict:
+                description_str = query_category_dict['description']
             
-
-            category_input_str = f'category name: {question_category}\n'
+            category_input_str = f'category name: {query_category}\n'
             if description_str:
                 category_input_str += f'category description: {description_str}\n'
             
-            category_input_str += f'question: {question}\n'
+            category_input_str += f'query: {query}\n'
             if instruction_str:
                 category_input_str += f'instruction: {instruction_str}\n'
-                
-            qa_categories_input_str_dict[question_category] = category_input_str
+            
+            query_strings_list.append(category_input_str)
 
-        self.qa_categories_input_str_dict = qa_categories_input_str_dict
+        queries_str = '\n'.join(query_strings_list)
+        return queries_str
 
-
-    def update_tagging_categories_input_str_dict(self):
-        tagging_categories_dict = self.tags
-
-        if isinstance(tagging_categories_dict, list):
-            tagging_categories_dict = dict(
-                general=dict(
-                    tags=tagging_categories_dict,
-                    description=''
-                )
-            )
-
-        tagging_categories_input_str_dict = {} 
-        for tag_category, tag_category_dict in tagging_categories_dict.items():
-            tag_list = tag_category_dict['tags']
-            tags_cat_desc = tag_category_dict['description']
-            tag_names_str = ', '.join(tag_list)
-
-            category_input_str = (
-                f'category name: {tag_category}\n' 
-                f'category description: {tags_cat_desc}\n' 
-                f'available tags: [{tag_names_str}]\n'
-            )
-            tagging_categories_input_str_dict[tag_category] = category_input_str
-        self.tagging_categories_input_str_dict = tagging_categories_input_str_dict
-
-
-    def set_mode(self, mode):
-        self.mode = mode
-   
 
     def set_input_content_type(self, input_content_type):
         self.input_content_type = input_content_type
@@ -131,30 +90,18 @@ class VLMPredictor:
         self.prompt = prompt
 
 
-    def set_tags(self, tags):
-        self.tags = tags
-        self.update_tagging_categories_input_str_dict()
+    def set_structured_prompt(self, queries_dict):
+        self.queries_dict = queries_dict
+        queries_str = self.construct_queries_str()
+        self.prompt = self.prompt_template.format(queries=queries_str)
 
 
-    def set_questions(self, questions):
-        self.questions = questions
-        self.update_qa_categories_input_str_dict()
-
-
-    def set_qa_input_template(self, qa_input_template):
-        self.qa_input_template = qa_input_template
-
-
-    def set_tagging_input_template(self, tagging_input_template):
-        self.tagging_input_template = tagging_input_template
+    def set_prompt_template(self, prompt_template):
+        self.prompt_template = prompt_template
 
 
     def set_output_template(self, output_template):
         self.output_template = output_template
-
-
-    def set_pose_predictor(self, pose_predictor):
-        self.pose_predictor = pose_predictor
 
 
     def process_visual_data(self, visual_data):
@@ -224,101 +171,8 @@ class VLMPredictor:
         return generated_text
 
 
-    def simple_captioning(self, visual_data):
-        output = self.generate_output(visual_data, None)
-        outputs = {'caption' : output}
-        return outputs
-
-
-    def prompted_captioning(self, visual_data):
-        prompts = self.prompt
-        if not isinstance(prompts, list):
-            prompts = [prompts]
-
-        outputs = {}
-        for prompt in prompts:
-            output = self.generate_output(visual_data, prompt)
-            outputs[prompt] = output
-
-        return outputs
-
-
-    def tagging(self, visual_data):
-        outputs = {}
-        if self.mode == 'tagging_merged':
-            categories_input_str_list = list(self.tagging_categories_input_str_dict.values())
-            categories_input_str = '\n'.join(categories_input_str_list)
-            prompt = self.tagging_input_template.format(input=categories_input_str)
-            output = self.generate_output(visual_data, prompt)
-            outputs['predictions'] = output
-        else:
-            for tags_category, category_input_str in self.tagging_categories_input_str_dict.items():
-                prompt = self.tagging_input_template.format(input=category_input_str)
-                output = self.generate_output(visual_data, prompt)
-                outputs[tags_category] = output
-
-        return outputs
-
-
-    def question_answering(self, visual_data):
-        outputs = {}
-
-        if self.mode == 'qa_merged':
-            categories_input_str_list = list(self.qa_categories_input_str_dict.values())
-            categories_input_str = '\n'.join(categories_input_str_list)
-            prompt = self.qa_input_template.format(input=categories_input_str)
-            output = self.generate_output(visual_data, prompt)
-            outputs['predictions'] = output
-        else:
-            for question_category, category_input_str in self.qa_categories_input_str_dict.items():
-                prompt = self.qa_input_template.format(input=category_input_str)
-                output = self.generate_output(visual_data, prompt)
-                outputs[question_category] = output
-
-        return outputs
-
-
-    def chat(self, visual_data):
-        outputs = {}
-        qa_template = self.qa_input_template + ' {}.'
-        context = ''
-
-        for question in self.questions:
-            if question is None:
-                continue
-
-            prompt = context + self.qa_input_template.format(question)
-            output = self.generate_output(visual_data, prompt)
-
-            question_anwer = qa_template.format(question, output)
-            context += question_anwer + ' '
-            
-            outputs[question] = output
-
-        return outputs
-
-
-    def outputs_to_string(self, outputs):
-        output_strs = []
-        for k, v in outputs.items():
-            output_str = self.output_template.format(k, v)
-            output_strs.append(output_str)
-        return output_strs
-
-
     def __call__(
         self, 
         visual_data: Union[List[np.ndarray], np.ndarray]
     ):
-        if self.mode == 'prompted':
-            outputs = self.prompted_captioning(visual_data)
-        elif self.mode in ['qa', 'qa_merged']:
-            outputs = self.question_answering(visual_data)
-        elif self.mode in ['tagging', 'tagging_merged']:
-            outputs = self.tagging(visual_data)
-        elif self.mode == 'chat':
-            outputs = self.chat(visual_data)
-        else:
-            outputs = self.simple_captioning(visual_data)
-            
-        return outputs
+        return self.generate_output(visual_data, self.prompt)
