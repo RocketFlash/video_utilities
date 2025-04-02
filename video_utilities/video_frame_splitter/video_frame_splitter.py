@@ -253,7 +253,7 @@ class VideoFrameSplitter:
             if n_frames_available < n_frames_max:
                 if verbose:
                     print(f'Can not read {n_frames_max} frames because only {n_frames_available} frames are available')
-            n_frames = min(n_frames_max, n_frames_available)
+            n_frames_max = min(n_frames_max, n_frames_available)
 
         selected_frame_scene_ids = []
         is_scene_based_selection = False
@@ -281,9 +281,15 @@ class VideoFrameSplitter:
             n_frames_max = None
         else:
             selected_frame_idxs = []
-            for frame_idx in range(start_idx,  n_frames):
+            n_selected_frames = 0
+            for frame_idx in range(start_idx,  n_frames_total):
+                if n_frames_max is not None:
+                    if n_selected_frames>=n_frames_max:
+                        break
+
                 if ((start_idx + frame_idx) % frame_interval) == 0:
                     selected_frame_idxs.append(frame_idx)
+                    n_selected_frames += 1
 
         resize_scale = 1
         if self.frame_max_size is not None:
