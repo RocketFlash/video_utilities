@@ -36,14 +36,28 @@ class Ovis_VLMPredictor(VLMPredictor):
         return model, processor
 
 
-    def process_image_and_text(self, image, text):
+    def process_image_and_text(
+        self, 
+        image, 
+        text
+    ):
         query = f'<image>\n{text}'
         image = Image.fromarray(image)
 
         visual_tokenizer = self.processor['visual_tokenizer']
         text_tokenizer = self.processor['text_tokenizer']
 
-        prompt, input_ids, pixel_values = self.model.preprocess_inputs(query, [image])
+        if 'max_partition' in self.additional_params:
+            max_partition = self.additional_params['max_partition']
+        else:
+            max_partition = 9
+
+        prompt, input_ids, pixel_values = self.model.preprocess_inputs(
+            query, 
+            [image],
+            max_partition=max_partition
+        )
+
         attention_mask = torch.ne(
             input_ids,
             text_tokenizer.pad_token_id

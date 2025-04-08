@@ -16,6 +16,7 @@ import math
 from pathlib import Path
 import matplotlib.pyplot as plt
 from collections import Counter
+from io import BytesIO
 
 
 def visualize_frames(
@@ -292,4 +293,98 @@ def visualize_scenes(
     view_frame(None)
 
 
-
+def visualize_frames_video(
+    frames, 
+    frame_max_size=512, 
+    fps=25,
+    image_format='JPEG', # JPEG or PNG
+    stats=None,
+    stats_fig_size=(8, 2)
+):
+    processed_frames = []
+    
+    for frame in frames:
+        h, w = frame.shape[:2]
+        longest_dim = max(h, w)
+        
+        if longest_dim > frame_max_size:
+            scale = frame_max_size / longest_dim
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            frame = cv2.resize(frame.copy(), (new_w, new_h))
+        
+        pil_img = Image.fromarray(frame)
+        with BytesIO() as buf:
+            pil_img.save(buf, format=image_format)
+            processed_frames.append(buf.getvalue())
+    
+    play = widgets.Play(
+        value=0,
+        min=0,
+        max=len(processed_frames)-1,
+        step=1,
+        interval=max(1, int(1000 / fps)),
+        description="Play",
+        disabled=False
+    )
+    
+    slider = widgets.IntSlider(
+        value=0,
+        min=0,
+        max=len(processed_frames)-1,
+        description="Frame"
+    )
+    
+    image_widget = widgets.Image(value=processed_frames[0])
+    
+    if stats is not None:
+        plt.close('all')
+        plt.ioff()
+        joint_plots = []
+        plot_outputs = []
+        
+        for stat_name, stat_values in stats.items():
+            fig, ax = plt.subplots(figsize=stats_fig_size)
+            fig.canvas.header_visible = False
+            ax.set_title(stat_name)
+            
+            if stat_values.ndim == 2 and stat_values.shape[1] == 3:
+                for i in range(3):
+                    ax.plot(stat_values[:, i], label=['x', 'y', 'z'][i])
+                ax.legend()
+            else:
+                ax.plot(stat_values.flatten())
+            
+            vline = ax.axvline(x=0, color='black', linewidth=1)
+            plt.tight_layout()
+            joint_plots.append((fig, vline))
+            
+            out = widgets.Output()
+            with out:
+                display(fig.canvas)
+            plot_outputs.append(out)
+        
+        plots_box = widgets.VBox(plot_outputs)
+        plt.ion()
+    else:
+        joint_plots = []
+        plots_box = widgets.VBox([])
+    
+    def sync_widgets(change):
+        slider.value = play.value
+    play.observe(sync_widgets, names='value')
+    
+    def update_display(change):
+        frame_idx = change['new']
+        image_widget.value = processed_frames[frame_idx]
+        
+        for fig, vline in joint_plots:
+            vline.set_xdata([frame_idx, frame_idx])
+            fig.canvas.draw_idle()
+    
+    slider.observe(update_display, names='value')
+    
+    controls = widgets.HBox([play, slider])
+    main_area = widgets.HBox([widgets.VBox([controls, image_widget]), plots_box])
+    
+    display(main_area)

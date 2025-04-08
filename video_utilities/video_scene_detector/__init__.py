@@ -14,6 +14,7 @@ from scenedetect import (
     detect, 
     open_video,
     SceneManager,
+    VideoManager,
     ContentDetector
 )
     
@@ -58,13 +59,15 @@ class VideoSceneDetector:
         config: Optional[VideoSceneDetectorConfig] = None,
         threshold: float = 27.0,
         min_scene_len: int = 15,
-        show_progress: bool = True
+        show_progress: bool = True,
+        backend: str = 'pyav'
     ):
         if config is None:
             config = VideoSceneDetectorConfig(
                 threshold=threshold,
                 min_scene_len=min_scene_len,
-                show_progress=show_progress
+                show_progress=show_progress,
+                backend=backend
             )
         self.config = config
         self.set_params_from_config(config=config)
@@ -77,17 +80,24 @@ class VideoSceneDetector:
         self.threshold = config.threshold
         self.min_scene_len = config.min_scene_len
         self.show_progress = config.show_progress
+        self.backend = config.backend
         
 
-    def detect_scenes(self, video_path):
-        video = open_video(video_path)
-
+    def detect_scenes(
+        self, 
+        video_path
+    ):
         scene_manager = SceneManager()
         scene_manager.add_detector(
             ContentDetector(
                 min_scene_len=self.min_scene_len,
                 threshold=self.threshold
             )
+        )
+
+        video = open_video(
+            video_path,
+            backend=self.backend
         )
         
         scene_manager.detect_scenes(

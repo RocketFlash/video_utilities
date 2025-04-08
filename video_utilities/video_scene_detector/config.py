@@ -11,3 +11,4 @@ class VideoSceneDetectorConfig():
     threshold: float = 27.0
     min_scene_len: int = 15
     show_progress: bool = True
+    backend: str = 'opencv'

@@ -26,7 +26,10 @@ class VLMPredictor:
         self.model = model
         self.processor = processor
 
+        self.prompt = None
+        self.system_prompt = None
         self.queries_dict = None
+        self.fps = 2
         
 
     def get_default_config(self):
@@ -82,29 +85,68 @@ class VLMPredictor:
         return queries_str
 
 
-    def set_input_content_type(self, input_content_type):
+    def set_input_content_type(
+        self, 
+        input_content_type: str
+    ):
         self.input_content_type = input_content_type
 
 
-    def set_prompt(self, prompt):
+    def set_system_prompt(
+        self, 
+        system_prompt: str
+    ):
+        self.system_prompt = system_prompt
+
+
+    def set_prompt(
+        self, 
+        prompt: str
+    ):
         self.prompt = prompt
 
 
-    def set_structured_prompt(self, queries_dict):
+    def set_fps(
+        self, 
+        fps: int
+    ):
+        self.fps = fps
+
+
+    def set_generation_params(
+        self, 
+        generation_params: Dict
+    ):
+        self.generation_params = generation_params
+
+
+    def set_structured_prompt(
+        self, 
+        queries_dict: Dict
+    ):
         self.queries_dict = queries_dict
         queries_str = self.construct_queries_str()
         self.prompt = self.prompt_template.format(queries=queries_str)
 
 
-    def set_prompt_template(self, prompt_template):
+    def set_prompt_template(
+        self, 
+        prompt_template: str
+    ):
         self.prompt_template = prompt_template
 
 
-    def set_output_template(self, output_template):
+    def set_output_template(
+        self, 
+        output_template: str
+    ):
         self.output_template = output_template
 
 
-    def process_visual_data(self, visual_data):
+    def process_visual_data(
+        self, 
+        visual_data
+    ):
         inputs_image = self.processor(
             images=visual_data,
             return_tensors="pt"

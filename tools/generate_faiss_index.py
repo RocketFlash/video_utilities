@@ -70,7 +70,10 @@ def sample_training_files(
 
 
 if __name__ == '__main__':
-    dataset_dir = Path('/mnt/nfs/ml/raf/video_fvs/')
+    # dataset_dir = Path('/mnt/nfs/ml/raf/video_fvs/')
+    # save_dir = dataset_dir / 'faiss_data'
+
+    dataset_dir = Path('/mnt/nfs/ml/raf/video_embeddings_emb_scenes_v2')
     save_dir = dataset_dir / 'faiss_data'
     save_dir.mkdir(exist_ok=True)
 
@@ -78,7 +81,7 @@ if __name__ == '__main__':
     n_gpus = 4
     n_workers = 32
     embedding_size = 1152
-    ncentroids = 20_000
+    n_centroids = 10_000
     n_subquantizers = 8
     nbits = 8
     train_n_files = 10_000
@@ -96,7 +99,7 @@ if __name__ == '__main__':
         index_cpu = faiss.IndexIVFPQ(
             coarse_quantizer, 
             embedding_size, 
-            ncentroids, 
+            n_centroids, 
             n_subquantizers, 
             nbits
         )

@@ -33,6 +33,10 @@ class Qwen2VL_VLMPredictor(VLMPredictor):
         "role": "user",
         "content": [],
     }
+    system_message_template = {
+        "role": "system",
+        "content": [],
+    }
 
 
     def get_model_and_processor(
@@ -89,6 +93,7 @@ class Qwen2VL_VLMPredictor(VLMPredictor):
         if self.input_content_type=='video':
             video_content = copy.deepcopy(self.video_content_template)
             video_content['video'] = images
+            video_content['fps'] = self.fps
             message["content"].append(video_content)
         else:
             for image in images:
@@ -99,19 +104,31 @@ class Qwen2VL_VLMPredictor(VLMPredictor):
         text_content = copy.deepcopy(self.text_content_template)
         text_content['text'] = text
         message["content"].append(text_content)
-        messages = [message]
+        
+        messages = []
+        if self.system_prompt is not None:
+            system_message = copy.deepcopy(self.system_message_template)
+            system_message['content'] = self.system_prompt
+            messages.append(system_message)
+
+        messages.append(message)
 
         prompt = self.processor.apply_chat_template(
             messages,
             tokenize=False,
             add_generation_prompt=True
         )
-        image_inputs, video_inputs = process_vision_info(messages)
+        image_inputs, video_inputs, video_kwargs = process_vision_info(
+            messages,
+            return_video_kwargs=True
+        )
+
         inputs = self.processor(
             text=[prompt],
             images=image_inputs,
             videos=video_inputs,
             padding=True,
+            fps=self.fps,
             return_tensors="pt",
         ).to(self.model.device)
         return inputs
