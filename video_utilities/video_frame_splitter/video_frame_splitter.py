@@ -8,7 +8,13 @@ from typing import (
     List, 
     Dict
 )
-import decord
+
+try:
+    import decord
+    DECORD_INSTALLED = True
+except ImportError:
+    DECORD_INSTALLED = False
+
 from dataclasses import dataclass
 from .config import VideoFrameSplitterConfig
 from ..video_scene_detector import SceneData
@@ -197,7 +203,7 @@ class VideoFrameSplitter:
     ):
         frames = []
 
-        if self.video_reader_type == 'decord':
+        if self.video_reader_type == 'decord' and DECORD_INSTALLED:
             try:
                 video = decord.VideoReader(str(video_path))
             except:
@@ -210,6 +216,9 @@ class VideoFrameSplitter:
             frame_h_orig, frame_w_orig, _ = video[0].asnumpy().shape
             fps = video.get_avg_fps()
         else:
+            if self.video_reader_type == 'decord':
+                print("Warning: 'decord' not found, using opencv reader")
+                
             video = cv2.VideoCapture(str(video_path))
             
             if not video.isOpened(): 
@@ -300,7 +309,7 @@ class VideoFrameSplitter:
         frame_idx = start_idx
         frame_count = 0
 
-        if self.video_reader_type == 'decord':
+        if self.video_reader_type == 'decord' and DECORD_INSTALLED:
             if verbose:
                 bar = tqdm(selected_frame_idxs)
             else:

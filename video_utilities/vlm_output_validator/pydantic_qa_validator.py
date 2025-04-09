@@ -8,12 +8,17 @@ from typing import (
     Literal,
     Type
 )
-from pydantic import (
+
+try:
+    from pydantic import (
     BaseModel, 
     Field, 
     create_model,
     validator
 )
+    PYDANTIC_INSTALLED = True
+except ImportError:
+    PYDANTIC_INSTALLED = False
 
 
 class PydanticQAOutputValidator:

@@ -10,13 +10,18 @@ from typing import (
 import numpy as np
 from dataclasses import dataclass
 from .config import VideoSceneDetectorConfig
-from scenedetect import (
-    detect, 
-    open_video,
-    SceneManager,
-    VideoManager,
-    ContentDetector
-)
+try:
+    from scenedetect import (
+        detect, 
+        open_video,
+        SceneManager,
+        ContentDetector
+    )
+    SCENEDETECT_INSTALLED = True
+except ImportError:
+    SCENEDETECT_INSTALLED = False
+
+
     
 
 @dataclass
@@ -151,6 +156,10 @@ class VideoSceneDetector:
         self,
         video_path: Union[str, os.PathLike],
     ):
+        if not SCENEDETECT_INSTALLED:
+            print('Scenedetect is not installed. Install it via `pip install scenedetect`')
+            return []
+        
         scenes_raw = self.detect_scenes(str(video_path))
         scene_list = self.get_scene_list(scenes_raw)
         return scene_list

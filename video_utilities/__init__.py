@@ -34,11 +34,6 @@ from .pipeline import (
     VideoPipeline
 )
 
-from .pose_predictor import (
-    get_pose_predictor,
-    YOLOUltralyticsConfig
-)
-
 from .feature_extractor import (
     FeatureExtractor,
     FeatureExtractorConfig
