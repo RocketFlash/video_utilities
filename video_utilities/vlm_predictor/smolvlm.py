@@ -9,7 +9,7 @@ from typing import (
 )
 from transformers import (
     AutoProcessor,
-    AutoModelForVision2Seq
+    AutoModelForImageTextToText
 )
 from .vlm_predictor import VLMPredictor
 
@@ -17,6 +17,11 @@ from .vlm_predictor import VLMPredictor
 class SmolVLM_VLMPredictor(VLMPredictor):
     image_content_template = {
         "type": "image",
+        "image": "",
+    }
+    video_content_template = {
+        "type": "video",
+        "video": [],
     }
     text_content_template = {
         "type": "text",
@@ -36,11 +41,11 @@ class SmolVLM_VLMPredictor(VLMPredictor):
         if 'attn_implementation' in self.additional_params:
             attn_implementation = self.additional_params['attn_implementation']
         else:
-            attn_implementation = 'flash_attention_2'
+            attn_implementation = 'sdpa'
 
         processor = AutoProcessor.from_pretrained(model_name)
-        model = AutoModelForVision2Seq.from_pretrained(
-            "HuggingFaceTB/SmolVLM-Instruct",
+        model = AutoModelForImageTextToText.from_pretrained(
+            model_name,
             torch_dtype=self.dtype,
             _attn_implementation=attn_implementation,
         ).to(self.device)
@@ -68,24 +73,29 @@ class SmolVLM_VLMPredictor(VLMPredictor):
                 image = visual_data
             images = [image]
 
-        for image in images:
-            image_content = copy.deepcopy(self.image_content_template)
-            message["content"].append(image_content)
+        if self.input_content_type=='video':
+            video_content = copy.deepcopy(self.video_content_template)
+            video_content['video'] = images
+            message["content"].append(video_content)
+        else:
+            for image in images:
+                image_content = copy.deepcopy(self.image_content_template)
+                image_content['image'] = image
+                message["content"].append(image_content)
 
         text_content = copy.deepcopy(self.text_content_template)
         text_content['text'] = text
+
         message["content"].append(text_content)
         messages = [message]
 
-        prompt = self.processor.apply_chat_template(
+        inputs = self.processor.apply_chat_template(
             messages,
-            add_generation_prompt=True
-        )
-        inputs = self.processor(
-            text=[prompt],
-            images=images,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
             return_tensors="pt",
-        ).to(self.model.device)
+        ).to(self.model.device, dtype=self.dtype)
         return inputs
     
 

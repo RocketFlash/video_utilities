@@ -67,6 +67,10 @@ class Qwen2VL_VLMPredictor(VLMPredictor):
                 device_map=self.device,
             )
 
+        if 'chat_template' in self.additional_params:
+            if self.additional_params['chat_template']:
+                processor.chat_template = self.additional_params['chat_template']
+
         return model, processor
 
 

@@ -7,6 +7,7 @@ from .qwen2 import Qwen2VL_VLMPredictor
 from .paligemma import PaliGemma2_VLMPredictor
 from .config import VLMPredictorConfig
 from .internvl import InternVL_VLMPredictor
+from .smolvlm import SmolVLM_VLMPredictor
 # from .deepseek_vl2 import DeepSeekVL2VLMPredictor
 
 
@@ -28,5 +29,7 @@ def get_vlm_predictor(
         return Pixtral_VLMPredictor(config)
     elif 'internvl' in model_name_lower:
         return InternVL_VLMPredictor(config)
+    elif 'smolvlm' in model_name_lower:
+        return SmolVLM_VLMPredictor(config)
     else:
         return BLIP2_VLMPredictor(config)
