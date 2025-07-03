@@ -1,4 +1,21 @@
+import cv2
 import json
+import numpy as np
+from urllib.request import urlopen
+
+
+def read_image_npy(image_path):
+    image = cv2.imread(image_path)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    return image
+
+
+def url_to_image(url, readFlag=cv2.IMREAD_COLOR):
+    resp = urlopen(url)
+    image = np.asarray(bytearray(resp.read()), dtype="uint8")
+    image = cv2.imdecode(image, readFlag)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    return image
 
 
 def get_value_if_not_none(

@@ -23,7 +23,7 @@ def visualize_frames(
     frames: Union[List[np.ndarray], List[VideoFrame]],
     frame_max_size: Optional[int] = None,
     vlm_predictor=None,
-    frames_results: Optional[List[VideoFrameOutputResult]] = None
+    frame_results: Optional[List[VideoFrameOutputResult]] = None
 ):
     n_frames = len(frames)
     is_video_frame_format = False
@@ -75,7 +75,7 @@ def visualize_frames(
     if is_video_frame_format:
         wgts_frame_info = [timestamp_label, frame_idx_label, scene_id_label]
 
-    if vlm_predictor is not None or frames_results is not None:
+    if vlm_predictor is not None or frame_results is not None:
         caption_widget = widgets.Textarea(
             value='',
             description='Prediction:',
@@ -129,12 +129,17 @@ def visualize_frames(
         img = Image.fromarray(frame)
         image_widget.value = img._repr_jpeg_()
 
-        if frames_results is not None:
-            outputs = frames_results[frame_slider.value].outputs
-            if outputs is not None:
+        if frame_results is not None:
+            if isinstance(frame_results[frame_slider.value], dict):
+                outputs = frame_results[frame_slider.value]
                 outputs_str = json.dumps(outputs, indent=4)
+            elif isinstance(frame_results[frame_slider.value], str):
+                outputs_str = frame_results[frame_slider.value]
             else:
-                outputs_str = 'Something wrong with inference'
+                outputs = frame_results[frame_slider.value].outputs
+                if outputs is not None:
+                    outputs_str = json.dumps(outputs, indent=4)
+                
             caption_widget.value = outputs_str
 
     frame_slider.observe(view_frame, names='value')

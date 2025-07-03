@@ -7,90 +7,40 @@ import pandas as pd
 import multiprocessing as mp
 from tqdm.auto import tqdm
 from pathlib import Path
-from dataclasses import dataclass, field
-from typing import (
-    Union,
-    Optional,
-    List,
-    Dict
-)
 from video_utilities import (
+    FeatureExtractor,
+    FeatureExtractorConfig,
     VideoFrameSplitter,
     VideoFrameSplitterConfig,
     VideoDownloader
 )
 from pathlib import Path
-from transformers import AutoModel, AutoProcessor
 
 
-@dataclass
-class VideoFeaturesExtractorConfig():
-    model_name: str = "google/siglip2-so400m-patch14-384"
-    attn_implementation: str = "flash_attention_2"
-    dtype: torch.dtype = torch.float16
-    device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    batch_size: int = 8
-    
-
-class VideoFeaturesExtractor:
+class EmbeddingsGenerator:
     def __init__(
         self,
-        config=None,
-        video_downloader=None,
-        video_frame_splitter=None,
-        save_dir='./',
-        overwrite_if_exist=False
+        feature_extractor,
+        video_downloader, 
+        video_frame_splitter,
+        save_dir,
+        batch_size: int = 64,
+        overwrite_if_exist: bool = False,
     ):
+        self.feature_extractor = feature_extractor
         self.video_downloader = video_downloader
         self.video_frame_splitter = video_frame_splitter
-        self.save_dir = Path(save_dir)
+        self.batch_size = batch_size
         self.overwrite_if_exist = overwrite_if_exist
-        
-        if config is None:
-            config = self.get_default_config()
-        self.config = config
-        self.set_params_from_config(config)
-
-        model, processor = self.get_model_and_processor(
-            model_name=self.model_name
-        )
-        self.model = model
-        self.processor = processor
-
-
-    def get_default_config(self):
-        return VideoFeaturesExtractorConfig()
-
-
-    def set_params_from_config(
-        self, 
-        config: VideoFeaturesExtractorConfig
-    ):
-        for key, value in vars(config).items():
-            setattr(self, key, value)
-
-
-    def get_model_and_processor(
-        self,
-        model_name: str,
-    ):
-        model = AutoModel.from_pretrained(
-            model_name, 
-            device_map=self.device,
-            attn_implementation=self.attn_implementation,
-            torch_dtype=self.dtype
-        ).eval()
-        processor = AutoProcessor.from_pretrained(model_name)
-        return model, processor
+        self.save_dir = save_dir
 
 
     def process_frames(
-        self, 
+        self,
         frames,
         verbose: bool = False
     ):
         frame_embeddings = []
-
         bar = range(0, len(frames), self.batch_size)
 
         if verbose:
@@ -99,14 +49,9 @@ class VideoFeaturesExtractor:
         for i in bar:
             batch = frames[i:i+self.batch_size]
             
-            inputs = self.processor(
-                images=batch, 
-                return_tensors="pt", 
-                padding="max_length"
-            ).to(self.device)
-            
-            with torch.no_grad():
-                outputs = self.model.get_image_features(**inputs)
+            outputs = self.feature_extractor.generate_image_embeddings(
+                batch
+            )
             
             frame_embeddings.append(outputs.cpu().numpy())
 
@@ -119,8 +64,8 @@ class VideoFeaturesExtractor:
 
 
     def download_video_and_extract_frames(
-        self, 
-        video_id
+        self,
+        video_id,
     ):
         video_id_str = str(video_id)
         status_dict = self.video_downloader(video_id_str, verbose=False)
@@ -154,21 +99,47 @@ class VideoFeaturesExtractor:
 def worker_function(
     queue, 
     gpu_id, 
-    video_downloader, 
-    video_frame_splitter, 
+    url_template, 
+    secret,
+    quality,
+    frame_max_size,
+    frame_interval_sec,
+    video_tmp_save_dir, 
     embeddings_save_dir, 
     counter, 
     lock
 ):
     torch.cuda.set_device(gpu_id)
+
+    video_downloader = VideoDownloader(
+        url_template=url_template,
+        secret=secret,
+        quality=quality,
+        save_dir=video_tmp_save_dir,
+        if_quality_not_exist_strategy='higher'
+    )
+
+    video_frame_splitter_config = VideoFrameSplitterConfig(
+        start_idx=0,
+        frame_interval_sec=frame_interval_sec,
+        frame_max_size=frame_max_size
+    )
+    video_frame_splitter = VideoFrameSplitter(
+        config=video_frame_splitter_config
+    )
     
-    config = VideoFeaturesExtractorConfig(device="cuda")
-    extractor = VideoFeaturesExtractor(
-        config=config,
-        video_downloader=video_downloader,
+    feature_extractor_config = FeatureExtractorConfig(device="cuda")
+    feature_extractor = FeatureExtractor(
+        config=feature_extractor_config,
+    )
+
+    embeddings_generator = EmbeddingsGenerator(
+        feature_extractor=feature_extractor,
+        video_downloader=video_downloader, 
         video_frame_splitter=video_frame_splitter,
         save_dir=embeddings_save_dir,
-        overwrite_if_exist=False
+        batch_size=feature_extractor_config.batch_size,
+        overwrite_if_exist=False,
     )
     
     while True:
@@ -176,7 +147,7 @@ def worker_function(
             video_id = queue.get(timeout=1)  
             if video_id is None:  
                 break
-            extractor(video_id)
+            embeddings_generator(video_id)
             with lock:
                 counter.value += 1
         except mp.queues.Empty:
@@ -215,13 +186,37 @@ def worker_function(
     type=str, 
     default='max'
 )
+@click.option(
+    "--frame_max_size", 
+    type=int, 
+    default=512
+)
+@click.option(
+    "--frame_interval_sec", 
+    type=int, 
+    default=1
+)
+@click.option(
+    "--n_gpus", 
+    type=int, 
+    default=1
+)
+@click.option(
+    "--n_workers_per_gpu", 
+    type=int, 
+    default=1
+)
 def generate_video_fvs(
     dataset_file_path,
     video_tmp_save_dir,
     embeddings_save_dir,
     url_template,
     secret,
-    quality
+    quality,
+    frame_max_size,
+    frame_interval_sec,
+    n_gpus,
+    n_workers_per_gpu
 ):
     mp.set_start_method('spawn')
     
@@ -237,40 +232,29 @@ def generate_video_fvs(
     embeddings_save_dir = Path(embeddings_save_dir)
     embeddings_save_dir.mkdir(exist_ok=True)
 
-    video_downloader = VideoDownloader(
-        url_template=url_template,
-        secret=secret,
-        quality=quality,
-        save_dir=video_tmp_save_dir,
-        if_quality_not_exist_strategy='higher'
-    )
-
-    video_frame_splitter_config = VideoFrameSplitterConfig(
-        start_idx=0,
-        frame_interval_sec=1,
-        frame_max_size=512
-    )
-    video_frame_splitter = VideoFrameSplitter(
-        config=video_frame_splitter_config
-    )
-
-    num_gpus = 4
-    workers_per_gpu = 4
-    total_workers = num_gpus * workers_per_gpu
+    n_total_workers = n_gpus * n_workers_per_gpu
     task_queue = mp.Queue()
     counter = mp.Value('i', 0) 
     lock = mp.Lock()
 
+    print('N gpus: ', n_gpus)
+    print('N workers per gpu : ', n_workers_per_gpu)
+    print('Total N workers   : ', n_total_workers)
+
     workers = []
-    for gpu_id in range(num_gpus):
-        for _ in range(workers_per_gpu):
+    for gpu_id in range(n_gpus):
+        for _ in range(n_workers_per_gpu):
             p = mp.Process(
                 target=worker_function,
                 args=(
                     task_queue, 
                     gpu_id, 
-                    video_downloader, 
-                    video_frame_splitter, 
+                    url_template, 
+                    secret,
+                    quality,
+                    frame_max_size,
+                    frame_interval_sec,
+                    video_tmp_save_dir, 
                     embeddings_save_dir,
                     counter, 
                     lock
@@ -282,7 +266,7 @@ def generate_video_fvs(
     for video_id in tqdm(video_ids, desc="Queueing videos"):
         task_queue.put(video_id)
 
-    for _ in range(num_gpus):
+    for _ in range(n_gpus):
         task_queue.put(None)
 
     total_tasks = len(video_ids)

@@ -68,7 +68,8 @@ class FeatureExtractor:
                 dtype=self.dtype
             ):
                 text_outputs = self.model.get_text_features(**text_inputs)
-                text_embeddings = text_outputs / text_outputs.norm(p=2, dim=-1, keepdim=True)
+                if self.normalize_vectors:
+                    text_embeddings = text_outputs / text_outputs.norm(p=2, dim=-1, keepdim=True)
                 text_embeddings = text_embeddings.detach().cpu()
         return text_embeddings
 
@@ -92,7 +93,8 @@ class FeatureExtractor:
             
             with torch.autocast(device_type=self.device, dtype=self.dtype):
                 image_embeddings = self.model.get_image_features(**image_inputs)
-                image_embeddings = image_embeddings / image_embeddings.norm(p=2, dim=-1, keepdim=True)
+                if self.normalize_vectors:
+                    image_embeddings = image_embeddings / image_embeddings.norm(p=2, dim=-1, keepdim=True)
                 image_embeddings = image_embeddings.detach().cpu()
 
         return image_embeddings

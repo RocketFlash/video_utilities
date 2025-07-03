@@ -9,12 +9,6 @@ import multiprocessing as mp
 from tqdm.auto import tqdm
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
-from typing import (
-    Union,
-    Optional,
-    List,
-    Dict
-)
 from video_utilities import (
     VideoDownloader,
     VideoSceneDetector,
@@ -22,7 +16,7 @@ from video_utilities import (
 )
 
 
-class VideoScenesExtractor:
+class VideoSceneExtractor:
     def __init__(
         self,
         video_downloader=None,
@@ -108,7 +102,7 @@ def worker_function(
         config=scene_detector_config
     )
     
-    extractor = VideoScenesExtractor(
+    extractor = VideoSceneExtractor(
         video_downloader=video_downloader,
         scene_detector=scene_detector,
         save_dir=scene_save_dir,
@@ -129,7 +123,7 @@ def worker_function(
 
 @click.command()
 @click.option(
-    "--npy_dataset_dir", 
+    "--embeddings_dir", 
     type=str, 
     required=True, 
 )
@@ -139,7 +133,7 @@ def worker_function(
     default='./'
 )
 @click.option(
-    "--scene_save_dir",
+    "--save_dir",
     default='./scenes',
     type=str,
     required=True,
@@ -159,26 +153,35 @@ def worker_function(
     type=str, 
     default='max'
 )
-def generate_scenes_data(
-    npy_dataset_dir,
+@click.option(
+    "--num_workers",
+    default=16,
+    type=int,
+    required=True,
+)
+def detect_scenes(
+    embeddings_dir,
     video_tmp_save_dir,
-    scene_save_dir,
+    save_dir,
     url_template,
     secret,
-    quality
+    quality,
+    num_workers
 ):
     print('Prepare video ids...')
-    npy_dataset_dir = Path(npy_dataset_dir)
-    npy_file_paths = list(npy_dataset_dir.glob('*.npy'))
-    video_ids = [npy_file.stem for npy_file in npy_file_paths]
+    embeddings_dir = Path(embeddings_dir)
+    embeddings_file_paths = list(embeddings_dir.glob('*.npy'))
+    video_ids = [
+        embeddings_file_path.stem 
+        for embeddings_file_path in embeddings_file_paths
+    ]
     
     video_tmp_save_dir = Path(video_tmp_save_dir)
     video_tmp_save_dir.mkdir(exist_ok=True)
 
-    scene_save_dir = Path(scene_save_dir)
-    scene_save_dir.mkdir(exist_ok=True)
+    save_dir = Path(save_dir)
+    save_dir.mkdir(exist_ok=True)
 
-    num_workers = 16
     task_queue = mp.Queue()
     counter = mp.Value('i', 0) 
     lock = mp.Lock()
@@ -188,6 +191,7 @@ def generate_scenes_data(
 
     print(f'N workers: {num_workers}')
     print('Load workers...')
+
     for _ in range(num_workers):
         p = mp.Process(
             target=worker_function,
@@ -197,7 +201,7 @@ def generate_scenes_data(
                 secret,
                 quality,
                 video_tmp_save_dir,
-                scene_save_dir,
+                save_dir,
                 counter, 
                 lock,
                 overwrite_if_exist
@@ -237,5 +241,5 @@ def generate_scenes_data(
 
 
 if __name__ == '__main__':
-    generate_scenes_data()
+    detect_scenes()
     

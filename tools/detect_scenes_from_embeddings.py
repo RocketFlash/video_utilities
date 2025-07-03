@@ -5,26 +5,7 @@ from tqdm.auto import tqdm
 from pathlib import Path
 from functools import partial
 from scipy.spatial.distance import cosine as cosine_distance
-
-
-def load_npy_file(
-    file_path
-):
-    file_id = int(file_path.stem)
-    embeddings = np.load(
-        file_path, 
-        mmap_mode='r'
-    )
-    norms = np.linalg.norm(
-        embeddings, 
-        axis=1, 
-        keepdims=True
-    )
-    norms[norms == 0] = 1.0
-    embeddings = embeddings / norms
-
-    n_frames = embeddings.shape[0]
-    return embeddings, file_id, n_frames
+from utils import load_embeddings_from_npy_file
 
 
 def consecutive_cosine_distance(
@@ -60,6 +41,7 @@ def find_scenes(
         
     return scene_list
 
+
 def calculate_adaptive_threshold(distances):
     Q1 = np.percentile(distances, 25)
     Q3 = np.percentile(distances, 75)
@@ -68,22 +50,22 @@ def calculate_adaptive_threshold(distances):
     return threshold
 
 
-def calculate_scenes_and_scene_embeddings_from_fvs_file(
-    video_fvs_file_path,
-    embeddings_save_dir,
+def detect_scenes_from_embeddings_file(
+    video_embeddings_file_path,
     scenes_save_dir,
     min_threshold=0.06
 ):
-    file_id = video_fvs_file_path.stem
+    file_id = video_embeddings_file_path.stem
 
-    embeddings_save_path = embeddings_save_dir / f'{file_id}.npy'
     scenes_save_path = scenes_save_dir / f'{file_id}.npy'
 
-    if embeddings_save_path.is_file() and scenes_save_path.is_file():
+    if scenes_save_path.is_file():
         return 
     
     try:
-        embeddings, file_id, n_frames = load_npy_file(video_fvs_file_path)
+        embeddings, file_id, n_frames = load_embeddings_from_npy_file(
+            video_embeddings_file_path
+        )
         
         distances_cosine = consecutive_cosine_distance(
             embeddings,
@@ -101,20 +83,9 @@ def calculate_scenes_and_scene_embeddings_from_fvs_file(
         )
         
         scene_list = np.array(scene_list)
-        
-        video_scene_embeddings = []
-        for scene_idx, scene_info in enumerate(scene_list):
-            scene_start, scene_end = scene_info
-            frame_embeddings = embeddings[scene_start:scene_end, :]
-            scene_embeddings = np.mean(frame_embeddings, axis=0)
-            video_scene_embeddings.append(scene_embeddings)
-        
-        video_scene_embeddings = np.array(video_scene_embeddings)
-        
-        np.save(embeddings_save_path, video_scene_embeddings)
         np.save(scenes_save_path, scene_list)
     except:
-        print(f'Something wrong with {video_fvs_file_path}')
+        print(f'Something wrong with {video_embeddings_file_path}')
 
 
 @click.command()
@@ -141,11 +112,18 @@ def calculate_scenes_and_scene_embeddings_from_fvs_file(
     type=int,
     required=True,
 )
-def calculate_scenes_and_scene_embeddings(
+@click.option(
+    "--min_threshold",
+    default=0.06,
+    type=float,
+    required=True,
+)
+def detect_scenes_from_embeddings(
     dataset_dir,
     embeddings_save_dir,
     scenes_save_dir,
-    num_workers
+    num_workers,
+    min_threshold
 ):
     dataset_dir = Path(dataset_dir)
 
@@ -158,10 +136,10 @@ def calculate_scenes_and_scene_embeddings(
     video_fvs_file_paths = list(dataset_dir.glob('*.npy'))
 
     process_func = partial(
-        calculate_scenes_and_scene_embeddings_from_fvs_file, 
+        detect_scenes_from_embeddings_file, 
         embeddings_save_dir=embeddings_save_dir,
         scenes_save_dir=scenes_save_dir,
-        min_threshold=0.06
+        min_threshold=min_threshold
     )
 
     with mp.Pool(processes=num_workers) as pool:
@@ -175,5 +153,5 @@ def calculate_scenes_and_scene_embeddings(
 
 
 if __name__ == '__main__':
-    calculate_scenes_and_scene_embeddings()
+    detect_scenes_from_embeddings()
     
