@@ -74,8 +74,8 @@ class Qwen2VL_VLMPredictor(VLMPredictor):
         return model, processor
 
 
-    def process_visual_data_and_text(
-        self, 
+    def prepare_prompt_and_messages(
+        self,
         visual_data: Union[List[np.ndarray], np.ndarray], 
         text: str
     ):
@@ -122,6 +122,19 @@ class Qwen2VL_VLMPredictor(VLMPredictor):
             tokenize=False,
             add_generation_prompt=True
         )
+
+        return prompt, messages
+
+
+    def process_visual_data_and_text(
+        self, 
+        visual_data: Union[List[np.ndarray], np.ndarray], 
+        text: str
+    ):
+        prompt, messages = self.prepare_prompt(
+            visual_data=visual_data, 
+            text=text
+        )
         image_inputs, video_inputs, video_kwargs = process_vision_info(
             messages,
             return_video_kwargs=True
@@ -154,3 +167,60 @@ class Qwen2VL_VLMPredictor(VLMPredictor):
             clean_up_tokenization_spaces=False
         )[0].strip()
         return generated_text
+
+
+    def generate_output_outlines(
+        self, 
+        visual_data, 
+        prompt
+    ):
+        if self.outlines_generator is not None:
+            prompt, messages = self.prepare_prompt_and_messages(
+                visual_data=visual_data, 
+                text=prompt
+            )
+
+            max_new_tokens = self.generation_params['max_new_tokens'] if 'max_new_tokens' in self.generation_params else 1024
+
+            result = self.outlines_generator(
+                {
+                    "text": prompt, 
+                    "images": visual_data
+                },
+                max_new_tokens=max_new_tokens
+            )
+        else:
+            print('There is no outlines generator')
+            result = None
+        return result
+    
+
+    def generate_output_outlines_batch(
+        self, 
+        visual_data, 
+        prompt
+    ):
+        prompt_samples = []
+        if self.outlines_generator is not None:
+            for visual_data_sample in visual_data:
+                prompt_sample, messages = self.prepare_prompt_and_messages(
+                    visual_data=visual_data_sample, 
+                    text=prompt
+                )
+                prompt_samples.append(prompt_sample)
+
+            input_data = {
+                "text": prompt_samples, 
+                "images": visual_data
+            }
+
+            max_new_tokens = self.generation_params['max_new_tokens'] if 'max_new_tokens' in self.generation_params else 1024
+
+            result = self.outlines_generator(
+                input_data,
+                max_new_tokens=max_new_tokens
+            )
+        else:
+            print('There is no outlines generator')
+            result = None
+        return result

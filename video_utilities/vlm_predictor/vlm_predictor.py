@@ -6,9 +6,21 @@ from typing import (
     List,
     Dict
 )
+from pydantic import BaseModel
+from typing import (
+    Type, 
+    TypeVar
+)
 from .config import VLMPredictorConfig
 from ..utils import generate_instruction_str
 
+try:
+    import outlines
+    OUTLINES_INSTALLED = True
+except ImportError:
+    OUTLINES_INSTALLED = False
+
+T = TypeVar('T', bound=BaseModel)
 
 class VLMPredictor:
     def __init__(
@@ -29,7 +41,19 @@ class VLMPredictor:
         self.prompt = None
         self.system_prompt = None
         self.queries_dict = None
+        self.output_schema = None
+        self.outlines_generator = None
+        self.outlines_model = None
         self.fps = 2
+
+        if self.use_outlines_model:
+            if OUTLINES_INSTALLED:
+                self.outlines_model = outlines.models.from_transformers(
+                    self.model, 
+                    self.processor
+                )
+            else:
+                print('Outlines library is not installed.')
         
 
     def get_default_config(self):
@@ -104,6 +128,18 @@ class VLMPredictor:
         prompt: str
     ):
         self.prompt = prompt
+
+    
+    def set_output_schema(
+        self, 
+        output_schema: T
+    ):
+        self.output_schema = output_schema
+        if self.outlines_model is not None:
+            self.outlines_generator = outlines.Generator(
+                self.outlines_model, 
+                self.output_schema
+            )
 
 
     def set_fps(
@@ -213,8 +249,34 @@ class VLMPredictor:
         return generated_text
 
 
+    def generate_output_outlines(
+        self, 
+        visual_data, 
+        prompt
+    ):
+        return None
+    
+
+    def generate_output_outlines_batch(
+        self, 
+        visual_data, 
+        prompt
+    ):
+        return None
+
+
     def __call__(
         self, 
-        visual_data: Union[List[np.ndarray], np.ndarray]
+        visual_data: Union[List[List[np.ndarray]], List[np.ndarray], np.ndarray],
+        batch_processing: bool = False
     ):
-        return self.generate_output(visual_data, self.prompt)
+        if batch_processing and isinstance(visual_data, list):
+            if self.use_outlines_model and OUTLINES_INSTALLED:
+                return self.generate_output_outlines_batch(visual_data, self.prompt)
+            else:
+                return None
+        else:
+            if self.use_outlines_model and OUTLINES_INSTALLED:
+                return self.generate_output_outlines(visual_data, self.prompt)
+            else:
+                return self.generate_output(visual_data, self.prompt)

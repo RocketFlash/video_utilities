@@ -8,10 +8,10 @@ from typing import (
 )
 
 DEFAULT_GENERATION_PARAMS = dict(
-    min_length=20,
-    max_length=512,
-    length_penalty=1,
-    repetition_penalty=1.5,
+    # min_length=20,
+    # max_length=512,
+    # length_penalty=1,
+    # repetition_penalty=1.5,
     temperature=1
 )
 
@@ -41,3 +41,4 @@ class VLMPredictorConfig():
     output_template: str = '{}: {}\n'
     additional_params: dict = field(default_factory=lambda: {})
     generate_instructions: bool = True
+    use_outlines_model: bool = False
