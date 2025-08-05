@@ -1,12 +1,14 @@
 import os
 import cv2
+import random
 import numpy as np
 from tqdm.auto import tqdm
 from typing import (
     Union, 
     Optional,
     List, 
-    Dict
+    Dict,
+    Tuple
 )
 
 try:
@@ -30,21 +32,20 @@ class VideoFrame:
 
 @dataclass
 class VideoFramesData:
-    frames: List
+    frames: List[VideoFrame]
     frame_w_orig: int
     frame_h_orig: int
     video_len_orig: float
     n_frames_orig: int
     fps: float
-
     frame_w: int
     frame_h: int
     start_idx: int
     start_sec: float
-    n_frames_max: int
-    n_sec_max: float
-    frame_interval: int
-    frame_interval_sec: float
+    n_frames_max: Optional[int]
+    n_sec_max: Optional[float]
+    frame_interval: Optional[int]
+    frame_interval_sec: Optional[float]
     video_len: float
     is_scene_based_selection: bool
     selected_n_frames: int
@@ -86,113 +87,79 @@ class VideoFramesData:
 
 
 class VideoFrameSplitter:
-    def __init__(
-        self,
-        config: Optional[VideoFrameSplitterConfig] = None,
-    ):  
-        if config is None:
-            config = self.get_default_config()
+    def __init__(self, config: Optional[VideoFrameSplitterConfig] = None):
+        self.config = config if config is not None else self.get_default_config()
+        self.set_params_from_config(self.config)
 
-        self.config = config
-        self.set_params_from_config(config=config)
-
-
-    def get_default_config(self):
+    def get_default_config(self) -> VideoFrameSplitterConfig:
         return VideoFrameSplitterConfig()
 
-
-    def set_params_from_config(
-        self, 
-        config: VideoFrameSplitterConfig
-    ):
+    def set_params_from_config(self, config: VideoFrameSplitterConfig):
         for key, value in vars(config).items():
             setattr(self, key, value)
 
-
-    def get_frame_idxs_from_interval(
+    def _determine_frame_indices(
         self,
-        start_idx: int, 
-        end_idx: int, 
-        n_frames: int = 1
-    ):
-        frame_indexes_list = list(range(start_idx, end_idx))
-        if n_frames >= len(frame_indexes_list):
-            return frame_indexes_list
-        else:
-            if n_frames==1:
-                return [int((end_idx + start_idx)/2)]
-                
-            indices = np.linspace(0, len(frame_indexes_list) - 1, n_frames, dtype=int)
-            return [frame_indexes_list[i] for i in indices]
-
-    
-    def calculate_frames_to_select(
-        self,
-        start_idx: int, 
-        end_idx: int, 
-        fps: float, 
-    ):
-        scene_length_frames = end_idx - start_idx + 1
-        scene_length_seconds = scene_length_frames / fps
-        
-        if scene_length_seconds <= self.scene_length_threshold:
-            proportion = scene_length_seconds / self.scene_length_threshold
-            n_frames = int(self.min_n_frames_per_scene + (self.max_n_frames_per_scene - self.min_n_frames_per_scene) * proportion)
-        else:
-            n_frames = self.max_n_frames_per_scene
-        
-        n_frames = min(n_frames, scene_length_frames)
-        n_frames = max(n_frames, self.min_n_frames_per_scene)
-        
-        return n_frames
-    
-
-    def get_selected_frames_from_scenes(
-        self,
-        scene_list: List[SceneData],
-        start_idx: int,
         n_frames_total: int,
-        fps: float
-    ):
-        if not scene_list:
-            scene_list = [
-                SceneData(
-                    scene_id=0,
-                    start_frame=0,
-                    end_frame=n_frames_total,
-                )
-            ]
-
-        selected_frame_idxs = []
+        fps: float,
+        scene_list: Optional[List[SceneData]],
+        selected_frame_idxs: Optional[List[int]],
+        selected_seconds: Optional[List[float]],
+        verbose: bool
+    ) -> Tuple[List[int], List[int], bool, Optional[int], Optional[float]]:
+        is_scene_based_selection = False
         selected_frame_scene_ids = []
 
-        for scene in scene_list:
-            start_scene_idx = scene.start_frame
-            end_scene_idx = scene.end_frame
+        # Priority 1: User provides exact frame indices or seconds
+        if selected_frame_idxs is not None:
+            return selected_frame_idxs, [], False, None, None
+        if selected_seconds is not None:
+            return [int(round(sec * fps)) for sec in selected_seconds], [], False, None, None
 
-            if start_idx>=end_scene_idx:
-                continue
-            elif start_idx<end_scene_idx and start_idx>start_scene_idx:
-                start_scene_idx = start_idx
+        start_idx = int(self.start_sec * fps) if self.start_sec is not None else self.start_idx
+        start_idx = min(start_idx, n_frames_total - 1)
 
-            n_frames_scene = self.calculate_frames_to_select(
-                start_idx=start_scene_idx,
-                end_idx=end_scene_idx,
-                fps=fps
-            )
+        frame_interval = int(round(self.frame_interval_sec * fps)) if self.frame_interval_sec is not None else self.frame_interval
+        frame_interval = max(1, frame_interval)
+        frame_interval_sec = frame_interval / fps if fps > 0 else -1
 
-            scene_selected_frame_idxs = self.get_frame_idxs_from_interval(
-                start_scene_idx, 
-                end_scene_idx, 
-                n_frames=n_frames_scene
-            )
+        # Priority 2: Random frame selection
+        if self.n_random_frames is not None:
+            end_idx = n_frames_total
+            if self.n_sec_max is not None:
+                end_idx = start_idx + int(self.n_sec_max * fps)
+            elif self.n_frames_max is not None:
+                end_idx = start_idx + (self.n_frames_max * frame_interval)
+            end_idx = min(end_idx, n_frames_total)
+            
+            frame_population = range(start_idx, end_idx, frame_interval)
+            if self.n_random_frames >= len(frame_population):
+                if verbose:
+                    print(f"Warning: Requested {self.n_random_frames} random frames, but only {len(frame_population)} are available. Returning all.")
+                indices = list(frame_population)
+            else:
+                indices = sorted(random.sample(list(frame_population), self.n_random_frames))
+            return indices, [], False, frame_interval, frame_interval_sec
 
-            selected_frame_idxs += scene_selected_frame_idxs
-            selected_frame_scene_ids += [scene.scene_id] * len(scene_selected_frame_idxs)
+        # Priority 3: Scene-based selection
+        if scene_list is not None:
+            is_scene_based_selection = True
+            indices, scene_ids = self.get_selected_frames_from_scenes(scene_list, start_idx, n_frames_total, fps)
+            return indices, scene_ids, is_scene_based_selection, None, None
 
-        return selected_frame_idxs, selected_frame_scene_ids
-      
-    
+        # Priority 4: Default interval-based selection
+        n_frames_available = (n_frames_total - start_idx)
+        n_frames_max = self.n_frames_max
+        if self.n_sec_max is not None:
+            n_frames_max = int(self.n_sec_max * fps)
+
+        n_frames_to_select = n_frames_available
+        if n_frames_max is not None:
+            n_frames_to_select = min(n_frames_max, n_frames_available)
+
+        indices = list(range(start_idx, start_idx + n_frames_to_select, frame_interval))
+        return indices, [], False, frame_interval, frame_interval_sec
+
     def __call__(
         self,
         video_path: Union[str, os.PathLike],
@@ -200,229 +167,147 @@ class VideoFrameSplitter:
         selected_frame_idxs: Optional[List[int]] = None,
         selected_seconds: Optional[List[float]] = None,
         verbose: bool = True
-    ):
-        frames = []
-
+    ) -> Optional[VideoFramesData]:
+        
         if self.video_reader_type == 'decord' and DECORD_INSTALLED:
             try:
-                video = decord.VideoReader(str(video_path))
-            except:
-                video = None
-
-            if video is None:
+                video = decord.VideoReader(str(video_path), ctx=decord.cpu(0))
+                n_frames_total = len(video)
+                fps = video.get_avg_fps()
+            except decord.DECORDError as e:
+                if verbose: print(f"Decord failed to open {video_path}: {e}")
                 return None
-            
-            n_frames_total  = len(video)
-            frame_h_orig, frame_w_orig, _ = video[0].asnumpy().shape
-            fps = video.get_avg_fps()
         else:
             if self.video_reader_type == 'decord':
-                print("Warning: 'decord' not found, using opencv reader")
-                
+                if verbose: print("Warning: 'decord' not found or failed, using slow 'opencv' reader.")
             video = cv2.VideoCapture(str(video_path))
-            
-            if not video.isOpened(): 
+            if not video.isOpened():
+                if verbose: print(f"OpenCV failed to open {video_path}")
                 return None
-                
             n_frames_total = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-            frame_w_orig = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
-            frame_h_orig = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = float(video.get(cv2.CAP_PROP_FPS))
 
-
-        video_len_orig = n_frames_total / fps if fps>0 else -1
-
-        if self.frame_interval_sec is not None:
-            frame_interval = int(round(self.frame_interval_sec * fps))
-        else:
-            frame_interval = self.frame_interval
-            
-        if self.start_sec is not None:
-            start_idx = int(self.start_sec * fps)
-        else:
-            start_idx = self.start_idx
-    
-        if start_idx>=n_frames_total:
-            if verbose:
-                print(f'Can not start from {self.start_idx} frame, because total number of frames is {n_frames_total}')
-            start_idx = 0
-
-        frame_interval_sec = frame_interval / fps if fps>0 else -1
-        start_sec = start_idx / fps if fps>0 else -1
-
-        n_frames_available = (n_frames_total - start_idx) // frame_interval
-        n_frames_max = self.n_frames_max
-        n_frames = n_frames_available
-        n_sec_max = self.n_sec_max
-
-        if n_sec_max is not None:
-            n_frames_max = int(n_sec_max * fps / frame_interval)
-
-        if n_frames_max is not None:
-            if n_frames_available < n_frames_max:
-                if verbose:
-                    print(f'Can not read {n_frames_max} frames because only {n_frames_available} frames are available')
-            n_frames_max = min(n_frames_max, n_frames_available)
-
-        selected_frame_scene_ids = []
-        is_scene_based_selection = False
-
-        if selected_frame_idxs is not None:
-            pass
-        elif selected_seconds is not None:
-            selected_frame_idxs = [int(round(sec * fps)) for sec in selected_seconds]
-        elif scene_list is not None:
-            selected_frame_idxs = []
-            is_scene_based_selection = True
+        if n_frames_total == 0:
+            if verbose: print("Video has no frames.")
+            return None
         
-            (selected_frame_idxs, 
-             selected_frame_scene_ids) = self.get_selected_frames_from_scenes(
-                scene_list=scene_list,
-                start_idx=start_idx,
-                n_frames_total=n_frames_total,
-                fps=fps
-            )
+        (
+            final_selected_idxs,
+            selected_frame_scene_ids,
+            is_scene_based_selection,
+            final_frame_interval,
+            final_frame_interval_sec
+        ) = self._determine_frame_indices(n_frames_total, fps, scene_list, selected_frame_idxs, selected_seconds, verbose)
 
-            n_frames = len(selected_frame_idxs)
-            frame_interval = None
-            frame_interval_sec = None
-            n_sec_max = None
-            n_frames_max = None
-        else:
-            selected_frame_idxs = []
-            n_selected_frames = 0
-            for frame_idx in range(start_idx,  n_frames_total):
-                if n_frames_max is not None:
-                    if n_selected_frames>=n_frames_max:
-                        break
+        if not final_selected_idxs:
+            if verbose: print("No frames were selected based on the criteria.")
+            return None
 
-                if ((start_idx + frame_idx) % frame_interval) == 0:
-                    selected_frame_idxs.append(frame_idx)
-                    n_selected_frames += 1
-
-        resize_scale = 1
-        if self.frame_max_size is not None:
-            max_dim = max(frame_h_orig, frame_w_orig)
-            if max_dim > self.frame_max_size:
-                resize_scale = self.frame_max_size / max_dim
-
-        frame_idx = start_idx
-        frame_count = 0
-
+        frames: List[VideoFrame] = []
+        
         if self.video_reader_type == 'decord' and DECORD_INSTALLED:
-            if verbose:
-                bar = tqdm(selected_frame_idxs)
-            else:
-                bar = selected_frame_idxs
-
-            for selected_idx in bar:
-                scene_id = None
-                if is_scene_based_selection:
-                    scene_list_idx = selected_frame_idxs.index(frame_idx)
-                    scene_id = selected_frame_scene_ids[scene_list_idx]
-
-                image = video[selected_idx].asnumpy()
-                if resize_scale != 1:
-                    image = cv2.resize(
-                        image, 
-                        (0, 0),
-                        fx=resize_scale, 
-                        fy=resize_scale
-                    )
-            
-                timestamp = round(selected_idx / fps, 3)
-
-                frame_data = VideoFrame(
-                    image=image,
-                    idx=selected_idx,
-                    timestamp=timestamp,
-                    scene_id=scene_id
-                )
-                frames.append(frame_data)
+            try:
+                image_batch = video.get_batch(final_selected_idxs).asnumpy()
+                
+                iterator = tqdm(enumerate(final_selected_idxs), total=len(final_selected_idxs), desc="Processing Frames") if verbose else enumerate(final_selected_idxs)
+                
+                for i, frame_idx in iterator:
+                    scene_id = selected_frame_scene_ids[i] if is_scene_based_selection else None
+                    frames.append(VideoFrame(
+                        image=image_batch[i],
+                        idx=frame_idx,
+                        timestamp=round(frame_idx / fps, 3),
+                        scene_id=scene_id
+                    ))
+            except Exception as e:
+                if verbose: print(f"Error during decord batch processing: {e}")
+                return None # or handle fallback
+        
         else:
-            video.set(cv2.CAP_PROP_POS_FRAMES, start_idx)
-            if verbose:
-                pbar = tqdm(total=n_frames)
-
-            while True:
-                if frame_count>=n_frames:
-                    break
-                    
-                success = video.grab()
+            iterator = tqdm(sorted(final_selected_idxs), desc="Processing Frames (OpenCV)", total=len(final_selected_idxs)) if verbose else sorted(final_selected_idxs)
+            for frame_idx in iterator:
+                video.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                success, image = video.read()
                 if not success:
-                    break
-
-                if frame_idx < start_idx:
-                    frame_idx += 1
+                    if verbose: print(f"Warning: Failed to read frame {frame_idx}")
                     continue
                 
-                scene_id = None
-                if frame_idx in selected_frame_idxs :
-                    if is_scene_based_selection:
-                        scene_list_idx = selected_frame_idxs.index(frame_idx)
-                        scene_id = selected_frame_scene_ids[scene_list_idx]
-
-                    success, image = video.retrieve()
-                    if not success:
-                        break
-                        
-                    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                    timestamp = round(frame_idx / fps, 3)
-
-                    if resize_scale != 1:
-                        image = cv2.resize(
-                            image, 
-                            (0, 0),
-                            fx=resize_scale, 
-                            fy=resize_scale
-                        )
-
-                    frame_data = VideoFrame(
-                        image=image,
-                        idx=frame_idx,
-                        timestamp=timestamp,
-                        scene_id=scene_id
-                    )
-
-                    frames.append(frame_data)
-                    frame_count += 1
-                    if verbose:
-                        pbar.update(1)
-                frame_idx += 1
-
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                scene_id = selected_frame_scene_ids[final_selected_idxs.index(frame_idx)] if is_scene_based_selection else None
+                frames.append(VideoFrame(
+                    image=image,
+                    idx=frame_idx,
+                    timestamp=round(frame_idx / fps, 3),
+                    scene_id=scene_id
+                ))
             video.release()
-            if verbose:
-                pbar.close()
 
-        frame_h, frame_w = image.shape[:2]
+        if not frames:
+            return None
         
-        if fps>0:
-            video_start_sec = selected_frame_idxs[0] / fps
-            video_end_sec = selected_frame_idxs[-1] / fps
-            video_len = round(video_end_sec - video_start_sec, 3)
-        else:
-            video_len = -1
+        frame_h_orig, frame_w_orig = frames[0].image.shape[:2]
+        resize_scale = 1.0
+        if self.frame_max_size and max(frame_h_orig, frame_w_orig) > self.frame_max_size:
+            resize_scale = self.frame_max_size / max(frame_h_orig, frame_w_orig)
+            for frame in frames:
+                frame.image = cv2.resize(frame.image, (0, 0), fx=resize_scale, fy=resize_scale, interpolation=cv2.INTER_AREA)
+
+        final_frame_h, final_frame_w = frames[0].image.shape[:2]
+        video_len = round((final_selected_idxs[-1] - final_selected_idxs[0]) / fps, 3) if fps > 0 else -1
         
-        video_frames_data = VideoFramesData(
+        return VideoFramesData(
             frames=frames,
             frame_w_orig=frame_w_orig,
             frame_h_orig=frame_h_orig,
-            video_len_orig=video_len_orig,
+            video_len_orig=n_frames_total / fps if fps > 0 else -1,
             n_frames_orig=n_frames_total,
             fps=fps,
-            frame_w=frame_w,
-            frame_h=frame_h,
-            start_idx=start_idx,
-            start_sec=start_sec,
-            n_frames_max=n_frames_max,
-            n_sec_max=n_sec_max,
-            frame_interval=frame_interval,
-            frame_interval_sec=frame_interval_sec,
+            frame_w=final_frame_w,
+            frame_h=final_frame_h,
+            start_idx=self.start_idx,
+            start_sec=self.start_sec if self.start_sec is not None else self.start_idx / fps,
+            n_frames_max=self.n_frames_max,
+            n_sec_max=self.n_sec_max,
+            frame_interval=final_frame_interval,
+            frame_interval_sec=final_frame_interval_sec,
             video_len=video_len,
             is_scene_based_selection=is_scene_based_selection,
             selected_n_frames=len(frames),
-            selected_frame_idxs=selected_frame_idxs,
-            selected_frame_scene_ids=selected_frame_scene_ids,            
+            selected_frame_idxs=final_selected_idxs,
+            selected_frame_scene_ids=selected_frame_scene_ids,
         )
 
-        return video_frames_data
+    
+    def get_frame_idxs_from_interval(self, start_idx: int, end_idx: int, n_frames: int = 1) -> List[int]:
+        frame_indexes_list = list(range(start_idx, end_idx))
+        if n_frames >= len(frame_indexes_list): return frame_indexes_list
+        if n_frames == 1: return [int((end_idx + start_idx) / 2)]
+        indices = np.linspace(0, len(frame_indexes_list) - 1, n_frames, dtype=int)
+        return [frame_indexes_list[i] for i in indices]
+
+    def calculate_frames_to_select(self, start_idx: int, end_idx: int, fps: float) -> int:
+        scene_length_seconds = (end_idx - start_idx + 1) / fps
+        if scene_length_seconds <= self.scene_length_threshold:
+            proportion = scene_length_seconds / self.scene_length_threshold
+            n_frames = int(self.min_n_frames_per_scene + (self.max_n_frames_per_scene - self.min_n_frames_per_scene) * proportion)
+        else:
+            n_frames = self.max_n_frames_per_scene
+        return max(self.min_n_frames_per_scene, min(n_frames, end_idx - start_idx + 1))
+
+    def get_selected_frames_from_scenes(self, scene_list: List[SceneData], start_idx: int, n_frames_total: int, fps: float) -> Tuple[List[int], List[int]]:
+        if not scene_list:
+            scene_list = [SceneData(scene_id=0, start_frame=0, end_frame=n_frames_total)]
+        
+        selected_frame_idxs = []
+        selected_frame_scene_ids = []
+        for scene in scene_list:
+            start_scene_idx, end_scene_idx = scene.start_frame, scene.end_frame
+            if start_idx >= end_scene_idx: continue
+            if start_idx > start_scene_idx: start_scene_idx = start_idx
+            
+            n_frames_scene = self.calculate_frames_to_select(start_scene_idx, end_scene_idx, fps)
+            scene_selected_idxs = self.get_frame_idxs_from_interval(start_scene_idx, end_scene_idx, n_frames_scene)
+            
+            selected_frame_idxs.extend(scene_selected_idxs)
+            selected_frame_scene_ids.extend([scene.scene_id] * len(scene_selected_idxs))
+        return selected_frame_idxs, selected_frame_scene_ids
