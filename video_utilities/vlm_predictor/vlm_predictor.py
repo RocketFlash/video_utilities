@@ -33,7 +33,8 @@ class VLMPredictor:
         self.set_params_from_config(config)
 
         model, processor = self.get_model_and_processor(
-            model_name=self.model_name
+            model_name=self.model_name,
+            gguf_file=self.gguf_file
         )
         self.model = model
         self.processor = processor
@@ -71,6 +72,7 @@ class VLMPredictor:
     def get_model_and_processor(
         self,
         model_name: str,
+        gguf_file: Optional[str]
     ):
         return None, None
 

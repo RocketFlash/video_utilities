@@ -42,6 +42,7 @@ class Qwen2VL_VLMPredictor(VLMPredictor):
     def get_model_and_processor(
         self,
         model_name: str,
+        gguf_file: Optional[str]
     ):
     
         if 'attn_implementation' in self.additional_params:
@@ -49,12 +50,16 @@ class Qwen2VL_VLMPredictor(VLMPredictor):
         else:
             attn_implementation = 'flash_attention_2'
 
-        processor = AutoProcessor.from_pretrained(model_name)
+        processor = AutoProcessor.from_pretrained(
+            model_name,
+            gguf_file=gguf_file
+        )
 
         model_name_lower = model_name.lower()
         if 'qwen2.5' in model_name_lower:
             model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
                 model_name,
+                gguf_file=gguf_file,
                 torch_dtype=self.dtype,
                 attn_implementation=attn_implementation,
                 device_map=self.device,
@@ -62,6 +67,7 @@ class Qwen2VL_VLMPredictor(VLMPredictor):
         else:
             model = Qwen2VLForConditionalGeneration.from_pretrained(
                 model_name,
+                gguf_file=gguf_file,
                 torch_dtype=self.dtype,
                 attn_implementation=attn_implementation,
                 device_map=self.device,
