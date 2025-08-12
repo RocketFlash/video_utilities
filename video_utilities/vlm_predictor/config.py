@@ -33,6 +33,7 @@ DEFAULT_TAGS = dict(
 @dataclass
 class VLMPredictorConfig():
     model_name: str = 'Salesforce/blip2-opt-2.7b'
+    gguf_file: Optional[str] = None
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     dtype: torch.dtype = torch.float16
     input_content_type: str = 'images' # one of ['images', 'video'] 
