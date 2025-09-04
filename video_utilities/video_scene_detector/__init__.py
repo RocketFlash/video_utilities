@@ -21,11 +21,9 @@ try:
 except ImportError:
     SCENEDETECT_INSTALLED = False
 
-
-    
-
 @dataclass
 class SceneData:
+    """Data class representing a video scene with timing information."""
     scene_id: int
     start_frame: int
     end_frame: int
@@ -34,17 +32,35 @@ class SceneData:
     n_frames: Optional[int] = None
     l_sec: Optional[float] = None
 
-    def __str__(self):
-        info_str = f"Scene data info:\n"
-        info_str += f"scene id   : {self.scene_id}\n"
-        info_str += f"start frame: {self.start_frame}\n"
-        info_str += f"end frame  : {self.end_frame}\n"
-        info_str += f"start sec  : {self.start_sec}\n"
-        info_str += f"end sec    : {self.end_sec}\n"
-        info_str += f"n frames   : {self.n_frames}\n"
-        info_str += f"len in sec : {self.l_sec}\n"
-        return info_str
+    def __post_init__(self):
+        """Calculate derived properties after initialization."""
+        if self.start_frame >= self.end_frame:
+            raise ValueError(f"start_frame ({self.start_frame}) must be less than end_frame ({self.end_frame})")
+        
+        # Calculate n_frames if not provided
+        if self.n_frames is None:
+            self.n_frames = self.end_frame - self.start_frame + 1
+        
+        # Calculate l_sec if we have timing info but not duration
+        if self.l_sec is None and self.start_sec is not None and self.end_sec is not None:
+            self.l_sec = self.end_sec - self.start_sec
 
+    def calculate_timing(self, fps: float) -> 'SceneData':
+        """Calculate timing information based on FPS."""
+        if self.start_sec is None:
+            self.start_sec = round(self.start_frame / fps, 3)
+        if self.end_sec is None:
+            self.end_sec = round(self.end_frame / fps, 3)
+        if self.l_sec is None:
+            self.l_sec = self.end_sec - self.start_sec
+        return self
+
+    def __str__(self) -> str:
+        duration_str = f"{self.l_sec:.2f}s" if self.l_sec is not None else f"{self.n_frames or 0} frames"
+        return (
+            f"Scene {self.scene_id}: frames {self.start_frame}-{self.end_frame} "
+            f"({self.n_frames or 0} frames, {duration_str})"
+        )
 
 class VideoSceneDetector:
     r"""

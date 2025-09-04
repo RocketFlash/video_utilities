@@ -56,8 +56,12 @@ def plot_bar_charts(
 
     if per_scene:
         for scene_id, scene_data in scene_tags.items():
-            scene_frames = [f for f in frames if (isinstance(f, VideoFrame) and f.scene_id == scene_id) or 
-                            (isinstance(f, np.ndarray) and frames_results[frames.index(f)].scene_id == scene_id)] if frames else None
+            scene_frames = [
+                f for f in frames 
+                if (isinstance(f, VideoFrame) and f.scene_id == scene_id) or 
+                   (isinstance(f, np.ndarray) and frames_results[frames.index(f)].scene_id == scene_id)
+            ] if frames else None
+            
             fig = _create_subplots(
                 scene_data, 
                 f"File: {video_name}, Scene {scene_id}", 
@@ -147,7 +151,6 @@ def _create_subplots(
     plt.tight_layout(rect=[0, 0, 1, 0.97])
     return fig
 
-# The _plot_frames function remains unchanged, but uses num_cols_frames instead of num_cols
 def _plot_frames(ax, frames, resize_to, num_cols_frames):
     num_frames = len(frames)
     num_rows = (num_frames - 1) // num_cols_frames + 1
@@ -161,7 +164,6 @@ def _plot_frames(ax, frames, resize_to, num_cols_frames):
         else:
             img = frame
 
-        # Resize image
         h, w = img.shape[:2]
         aspect = w / h
         if w > h:

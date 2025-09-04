@@ -8,14 +8,12 @@ from typing import (
     Dict
 )
 
-
 @dataclass
 class VideoFrameOutputResult:
     frame_idx: int
     timestamp: float
     scene_id: Optional[int]
     outputs: dict
-
 
 class VideoCaptioner:
     def __init__(

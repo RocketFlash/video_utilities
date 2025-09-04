@@ -4,3 +4,7 @@ from .video_frame_splitter import (
     VideoFrameSplitter,
     VideoFrameSplitterConfig
 )
+
+from .video_frame_splitter_test import (
+    VideoFrameSplitterTester, 
+)
