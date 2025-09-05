@@ -2,7 +2,9 @@ from .video_frame_splitter import (
     VideoFrame,
     VideoFramesData,
     VideoFrameSplitter,
-    VideoFrameSplitterConfig
+    VideoFrameSplitterConfig,
+    FrameSelectionStrategy,
+    VideoReaderType
 )
 from .video_downloader import VideoDownloader
 from .vlm_predictor import (
@@ -11,6 +13,7 @@ from .vlm_predictor import (
     VLMPredictorConfig
 )
 from .video_scene_detector import (
+    SceneData,
     VideoSceneDetector,
     VideoSceneDetectorConfig
 )

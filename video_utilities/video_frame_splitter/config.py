@@ -27,7 +27,7 @@ class VideoFrameSplitterConfig:
     frame_interval_sec: Optional[float] = None
     
     # Frame processing
-    frame_max_size: Optional[int] = 512
+    frame_max_size: Optional[int] = None
     maintain_aspect_ratio: bool = True
     interpolation_method: int = cv2.INTER_AREA
     

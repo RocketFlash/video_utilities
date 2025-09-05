@@ -32,9 +32,11 @@ class SceneData:
     n_frames: Optional[int] = None
     l_sec: Optional[float] = None
 
+    
+
     def __post_init__(self):
         """Calculate derived properties after initialization."""
-        if self.start_frame >= self.end_frame:
+        if self.start_frame > self.end_frame:
             raise ValueError(f"start_frame ({self.start_frame}) must be less than end_frame ({self.end_frame})")
         
         # Calculate n_frames if not provided
