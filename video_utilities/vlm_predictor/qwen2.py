@@ -137,7 +137,7 @@ class Qwen2VL_VLMPredictor(VLMPredictor):
         visual_data: Union[List[np.ndarray], np.ndarray], 
         text: str
     ):
-        prompt, messages = self.prepare_prompt(
+        prompt, messages = self.prepare_prompt_and_messages(
             visual_data=visual_data, 
             text=text
         )
