@@ -23,6 +23,8 @@ class VideoFrameSplitterConfig:
     # Frame selection parameters
     start_idx: int = 0
     start_sec: Optional[float] = None
+    end_idx: Optional[int] = None  
+    end_sec: Optional[float] = None
     frame_interval: int = 1
     frame_interval_sec: Optional[float] = None
     

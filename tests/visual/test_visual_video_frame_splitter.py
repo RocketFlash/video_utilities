@@ -1,7 +1,3 @@
-"""
-Visual tests for VideoFrameSplitter - generates images for manual inspection.
-"""
-
 import pytest
 import cv2
 import numpy as np
@@ -54,6 +50,7 @@ class TestVisualVideoFrameSplitter:
             ("interval", {"frame_interval": 10, "n_frames_max": 6}),
             ("time_based", {"frame_interval_sec": 2.0, "n_sec_max": 10.0}),
             ("random", {"n_random_frames": 6, "start_sec": 1.0, "n_sec_max": 12.0}),
+            ("end_constrained", {"frame_interval": 8, "start_sec": 2.0, "end_sec": 8.0}),
         ]
         
         results = {}
@@ -349,3 +346,76 @@ class TestVisualVideoFrameSplitter:
             scenes.append(scene)
         
         return scenes
+    
+    def test_end_constraints_visual(self, sample_video_path, test_results_dir):
+        """Visualize end constraints (end_idx and end_sec) functionality."""
+        output_dir = test_results_dir / "frame_splitter" / "end_constraints"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Test different end constraint configurations
+        constraints = [
+            ("no_constraint", {}),
+            ("end_sec_5", {"end_sec": 5.0}),
+            ("end_sec_10", {"end_sec": 10.0}),
+            ("end_idx_100", {"end_idx": 100}),
+            ("start_end_range", {"start_sec": 2.0, "end_sec": 8.0}),
+        ]
+        
+        results = {}
+        for constraint_name, params in constraints:
+            config = VideoFrameSplitterConfig(
+                frame_interval_sec=1.0,
+                show_progress=False,
+                **params
+            )
+            splitter = VideoFrameSplitter(config)
+            result = splitter.extract_frames(sample_video_path)
+            
+            if result and result.frames:
+                results[constraint_name] = result
+                
+                # Save grid for each constraint
+                self._save_frame_grid(
+                    result.frames,
+                    output_dir / f"{constraint_name}_grid.png",
+                    title=f"{constraint_name.replace('_', ' ').title()} - {len(result.frames)} frames"
+                )
+        
+        # Create comparison timeline showing different constraints
+        self._create_constraint_comparison(results, output_dir / "constraint_comparison.png")
+    
+    def _create_constraint_comparison(self, results: dict, output_path: Path):
+        """Create comparison of different end constraint configurations."""
+        fig, ax = plt.subplots(figsize=(15, 8))
+        
+        colors = plt.cm.tab10(np.linspace(0, 1, len(results)))
+        
+        for i, (constraint_name, result) in enumerate(results.items()):
+            timestamps = [frame.timestamp for frame in result.frames]
+            y_pos = [i] * len(timestamps)
+            
+            ax.scatter(timestamps, y_pos, c=[colors[i]], label=constraint_name, 
+                      s=60, alpha=0.7)
+            
+            # Add constraint indicators
+            if result.end_sec:
+                ax.axvline(x=result.end_sec, color=colors[i], linestyle='--', alpha=0.5)
+                ax.text(result.end_sec, i, f'end: {result.end_sec}s', 
+                       rotation=90, va='bottom', ha='right', fontsize=8)
+            
+            if result.start_sec > 0:
+                ax.axvline(x=result.start_sec, color=colors[i], linestyle=':', alpha=0.5)
+                ax.text(result.start_sec, i, f'start: {result.start_sec}s', 
+                       rotation=90, va='bottom', ha='left', fontsize=8)
+        
+        ax.set_xlabel('Time (seconds)')
+        ax.set_ylabel('Constraint Configuration')
+        ax.set_yticks(range(len(results)))
+        ax.set_yticklabels([name.replace('_', ' ').title() for name in results.keys()])
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(True, alpha=0.3)
+        ax.set_title('End Constraint Comparison - Frame Selection Timeline')
+        
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close()

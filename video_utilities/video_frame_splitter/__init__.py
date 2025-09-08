@@ -6,7 +6,3 @@ from .video_frame_splitter import (
     FrameSelectionStrategy,
     VideoReaderType
 )
-
-from .video_frame_splitter_test import (
-    VideoFrameSplitterTester, 
-)

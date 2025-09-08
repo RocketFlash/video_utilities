@@ -1,7 +1,3 @@
-"""
-Integration tests for VideoFrameSplitter with real video files.
-"""
-
 import pytest
 from pathlib import Path
 from video_utilities import VideoFrameSplitter, VideoFrameSplitterConfig
@@ -23,6 +19,9 @@ class TestVideoFrameSplitterIntegration:
         
         assert result is not None
         assert result.total_frames <= 10
+        assert result.video_path == sample_video_path
+        assert result.end_idx is not None
+        assert result.end_sec is not None
         
         # Step 2: Extract specific timestamps based on first result
         if result.frames:
@@ -60,4 +59,50 @@ class TestVideoFrameSplitterIntegration:
                 # Should either work or fail gracefully
                 if result is not None:
                     assert result.total_frames >= 0
+                    assert result.video_path == video_file
                     pytest.mark.xfail(reason=f"No {ext} test file available")
+    
+    def test_end_time_constraints(self, sample_video_path):
+        """Test end_idx and end_sec constraint functionality."""
+        # Test with end_sec constraint
+        config = VideoFrameSplitterConfig(
+            start_sec=1.0,
+            end_sec=5.0,
+            frame_interval_sec=0.5,
+            show_progress=False
+        )
+        splitter = VideoFrameSplitter(config)
+        result = splitter.extract_frames(sample_video_path)
+        
+        assert result is not None
+        assert result.end_sec == 5.0
+        assert all(frame.timestamp <= 5.0 for frame in result.frames)
+        assert all(frame.timestamp >= 1.0 for frame in result.frames)
+        
+        # Test with end_idx constraint
+        config_idx = VideoFrameSplitterConfig(
+            start_idx=30,
+            end_idx=60,
+            frame_interval=5,
+            show_progress=False
+        )
+        splitter_idx = VideoFrameSplitter(config_idx)
+        result_idx = splitter_idx.extract_frames(sample_video_path)
+        
+        if result_idx is not None:
+            assert result_idx.end_idx == 60
+            assert all(frame.idx <= 60 for frame in result_idx.frames)
+            assert all(frame.idx >= 30 for frame in result_idx.frames)
+    
+    def test_video_path_preservation(self, sample_video_path):
+        """Test that video_path is correctly stored in VideoFramesData."""
+        config = VideoFrameSplitterConfig(
+            n_frames_max=5,
+            show_progress=False
+        )
+        splitter = VideoFrameSplitter(config)
+        result = splitter.extract_frames(sample_video_path)
+        
+        assert result is not None
+        assert result.video_path == sample_video_path
+        assert Path(result.video_path).name == Path(sample_video_path).name

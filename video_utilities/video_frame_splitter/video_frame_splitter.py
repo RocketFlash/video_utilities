@@ -51,6 +51,7 @@ class VideoFrame:
 @dataclass
 class VideoFramesData:
     """Container for video frames and associated metadata."""
+    video_path: Union[str, os.PathLike]
     frames: List[VideoFrame]
     # Original video properties
     frame_w_orig: int
@@ -64,6 +65,8 @@ class VideoFramesData:
     start_idx: int
     start_sec: float
     selection_strategy: FrameSelectionStrategy
+    end_idx: Optional[int] = None  
+    end_sec: Optional[float] = None
     # Selection parameters
     n_frames_max: Optional[int] = None
     n_sec_max: Optional[float] = None
@@ -114,10 +117,14 @@ class VideoFramesData:
         ]
     
     def __str__(self) -> str:
+        time_range = f"{self.start_sec:.2f}s"
+        if self.end_sec is not None:
+            time_range += f" to {self.end_sec:.2f}s"
+        
         return (
             f"VideoFramesData: {self.selected_n_frames} frames "
-            f"({self.video_len:.2f}s) from {self.n_frames_orig} total frames "
-            f"({self.video_len_orig:.2f}s), strategy: {self.selection_strategy.value}"
+            f"({self.video_len:.2f}s) from {time_range}, "
+            f"strategy: {self.selection_strategy.value}"
         )
 
 class VideoFrameSplitter:
@@ -195,13 +202,19 @@ class VideoFrameSplitter:
         self,
         selected_frame_idxs: Optional[List[int]],
         selected_seconds: Optional[List[float]],
-        fps: float
+        fps: float,
+        n_frames_total: int
     ) -> List[int]:
         """Get frame indices from manual selection."""
+        end_idx = self._get_effective_end_idx(fps, n_frames_total)  
+        
         if selected_frame_idxs is not None:
-            return list(selected_frame_idxs)
+            # Filter indices to be within the end constraint
+            return [idx for idx in selected_frame_idxs if idx <= end_idx] 
         elif selected_seconds is not None:
-            return [max(0, int(round(sec * fps))) for sec in selected_seconds]
+            indices = [max(0, int(round(sec * fps))) for sec in selected_seconds]
+            # Filter indices to be within the end constraint
+            return [idx for idx in indices if idx <= end_idx]
         return []
     
     def _get_random_frame_indices(
@@ -211,17 +224,18 @@ class VideoFrameSplitter:
     ) -> Tuple[List[int], Optional[int], Optional[float]]:
         """Get random frame indices within specified constraints."""
         start_idx = self._get_effective_start_idx(fps)
+        end_idx = self._get_effective_end_idx(fps, n_frames_total)  
         frame_interval, frame_interval_sec = self._get_effective_frame_interval(fps)
         
-        # Determine end index
-        end_idx = n_frames_total
+        # Determine actual end index considering other constraints
+        actual_end_idx = end_idx + 1  # +1 because range is exclusive
         if self.config.n_sec_max is not None:
-            end_idx = min(end_idx, start_idx + int(self.config.n_sec_max * fps))
+            actual_end_idx = min(actual_end_idx, start_idx + int(self.config.n_sec_max * fps))
         elif self.config.n_frames_max is not None:
-            end_idx = min(end_idx, start_idx + (self.config.n_frames_max * frame_interval))
+            actual_end_idx = min(actual_end_idx, start_idx + (self.config.n_frames_max * frame_interval))
         
         # Create population of available frames
-        frame_population = list(range(start_idx, end_idx, frame_interval))
+        frame_population = list(range(start_idx, actual_end_idx, frame_interval))
         
         if self.config.n_random_frames >= len(frame_population):
             logger.warning(
@@ -239,6 +253,14 @@ class VideoFrameSplitter:
             return max(0, int(self.config.start_sec * fps))
         return max(0, self.config.start_idx)
     
+    def _get_effective_end_idx(self, fps: float, n_frames_total: int) -> int:
+        """Get the effective ending frame index."""
+        if self.config.end_sec is not None:
+            return min(n_frames_total - 1, int(self.config.end_sec * fps))
+        elif self.config.end_idx is not None:
+            return min(n_frames_total - 1, self.config.end_idx)
+        return n_frames_total - 1
+
     def _get_effective_frame_interval(self, fps: float) -> Tuple[int, float]:
         """Get the effective frame interval."""
         if self.config.frame_interval_sec is not None:
@@ -256,10 +278,11 @@ class VideoFrameSplitter:
     ) -> Tuple[List[int], int, float]:
         """Get frame indices using interval-based selection."""
         start_idx = self._get_effective_start_idx(fps)
+        end_idx = self._get_effective_end_idx(fps, n_frames_total)  # Add this line
         frame_interval, frame_interval_sec = self._get_effective_frame_interval(fps)
         
         # Calculate maximum frames to select
-        n_frames_available = n_frames_total - start_idx
+        n_frames_available = end_idx - start_idx + 1 
         n_frames_max = n_frames_available
         
         if self.config.n_sec_max is not None:
@@ -267,8 +290,8 @@ class VideoFrameSplitter:
         if self.config.n_frames_max is not None:
             n_frames_max = min(n_frames_max, self.config.n_frames_max)
         
-        end_idx = min(n_frames_total, start_idx + n_frames_max)
-        indices = list(range(start_idx, end_idx, frame_interval))
+        actual_end_idx = min(end_idx + 1, start_idx + n_frames_max)  
+        indices = list(range(start_idx, actual_end_idx, frame_interval))
         
         return indices, frame_interval, frame_interval_sec
     
@@ -303,25 +326,28 @@ class VideoFrameSplitter:
     ) -> Tuple[List[int], List[int]]:
         """Get frame indices using scene-based selection."""
         if not scene_list:
-            # Create single scene covering entire video
+            # Create single scene covering the specified range
+            start_idx = self._get_effective_start_idx(fps)
+            end_idx = self._get_effective_end_idx(fps, n_frames_total)
             scene_list = [SceneData(
                 scene_id=0, 
-                start_frame=0, 
-                end_frame=n_frames_total - 1
+                start_frame=start_idx,  
+                end_frame=end_idx 
             )]
         
         start_idx = self._get_effective_start_idx(fps)
+        end_idx = self._get_effective_end_idx(fps, n_frames_total)
         selected_indices = []
         scene_ids = []
         
         for scene in scene_list:
-            # Skip scenes that end before our start index
-            if scene.end_frame < start_idx:
+            # Skip scenes that are outside our range
+            if scene.end_frame < start_idx or scene.start_frame > end_idx:  
                 continue
             
-            # Adjust scene boundaries if needed
+            # Adjust scene boundaries to fit within our range
             scene_start = max(scene.start_frame, start_idx)
-            scene_end = scene.end_frame
+            scene_end = min(scene.end_frame, end_idx)
             
             if scene_start >= scene_end:
                 continue
@@ -464,7 +490,7 @@ class VideoFrameSplitter:
             
             if strategy == FrameSelectionStrategy.MANUAL:
                 frame_indices = self._get_manual_frame_indices(
-                    selected_frame_idxs, selected_seconds, fps
+                    selected_frame_idxs, selected_seconds, fps, n_frames_total
                 )
             elif strategy == FrameSelectionStrategy.RANDOM:
                 frame_indices, frame_interval, frame_interval_sec = self._get_random_frame_indices(
@@ -535,8 +561,12 @@ class VideoFrameSplitter:
             
             # Get final frame dimensions
             final_frame_h, final_frame_w = frames[0].image.shape[:2]
+
+            end_idx = self._get_effective_end_idx(fps, n_frames_total)
+            end_sec = end_idx / fps if fps > 0 else 0
             
             return VideoFramesData(
+                video_path=video_path,
                 frames=frames,
                 frame_w_orig=frame_w_orig,
                 frame_h_orig=frame_h_orig,
@@ -547,6 +577,8 @@ class VideoFrameSplitter:
                 frame_h=final_frame_h,
                 start_idx=self._get_effective_start_idx(fps),
                 start_sec=self._get_effective_start_idx(fps) / fps if fps > 0 else 0,
+                end_idx=end_idx,      
+                end_sec=end_sec,
                 selection_strategy=strategy,
                 n_frames_max=self.config.n_frames_max,
                 n_sec_max=self.config.n_sec_max,
