@@ -116,6 +116,8 @@ class VideoFramesData:
             if start_sec <= frame.timestamp <= end_sec
         ]
     
+    def __len__(self): return self.total_frames
+    
     def __str__(self) -> str:
         time_range = f"{self.start_sec:.2f}s"
         if self.end_sec is not None:
